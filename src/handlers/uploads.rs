@@ -11,62 +11,105 @@ pub async fn upload_profile_picture(
     Path(user_id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
-    while let Some(field) = multipart.next_field().await.unwrap() {
+    tracing::info!("📸 Development mode: Processing profile picture upload for user: {}", user_id);
+
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        tracing::error!("Multipart field error: {}", e);
+        StatusCode::BAD_REQUEST
+    })? {
+        
         let name = field.name().unwrap_or("").to_string();
         
         if name == "file" {
             let filename = field.file_name().unwrap_or("avatar.jpg").to_string();
-            let data = field.bytes().await.unwrap().to_vec();
+            let data = field.bytes().await.map_err(|e| {
+                tracing::error!("Failed to read file bytes: {}", e);
+                StatusCode::BAD_REQUEST
+            })?;
             
-            let extension = filename.split('.').last().unwrap_or("jpg");
-            
-            match state.s3_service.upload_profile_picture(&user_id, data, extension).await {
-                Ok(url) => return Ok(Json(ApiResponse::success(url))),
-                Err(e) => {
-                    tracing::error!("Failed to upload profile picture: {}", e);
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                }
+            if data.is_empty() {
+                return Ok(Json(ApiResponse::error("File is empty".to_string())));
             }
+            
+            // Development mode: Save to local filesystem
+            let upload_dir = std::env::var("FILE_STORAGE_PATH").unwrap_or_else(|_| "C:\\temp\\gaming-uploads".to_string());
+            let user_dir = format!("{}\\profiles\\{}", upload_dir, user_id);
+            
+            // Create directory if it doesn't exist
+            if let Err(e) = std::fs::create_dir_all(&user_dir) {
+                tracing::error!("Failed to create upload directory: {}", e);
+                return Ok(Json(ApiResponse::error("Failed to create upload directory".to_string())));
+            }
+            
+            let file_path = format!("{}\\{}", user_dir, filename);
+            
+            // Save file
+            if let Err(e) = std::fs::write(&file_path, &data) {
+                tracing::error!("Failed to save file: {}", e);
+                return Ok(Json(ApiResponse::error("Failed to save file".to_string())));
+            }
+            
+            let file_url = format!("file://{}", file_path);
+            tracing::info!("✅ File saved locally: {}", file_url);
+            
+            return Ok(Json(ApiResponse::success(file_url)));
         }
     }
     
-    Err(StatusCode::BAD_REQUEST)
+    Ok(Json(ApiResponse::error("No file provided".to_string())))
 }
+
 
 pub async fn upload_chat_attachment(
     State(state): State<AppState>,
     Path(chat_id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
-    while let Some(field) = multipart.next_field().await.unwrap() {
+    tracing::info!("📎 Processing chat attachment upload for chat: {}", chat_id);
+
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        tracing::error!("Multipart field error: {}", e);
+        StatusCode::BAD_REQUEST
+    })? {
+        
         let name = field.name().unwrap_or("").to_string();
         
         if name == "file" {
             let filename = field.file_name().unwrap_or("attachment").to_string();
-            let data = field.bytes().await.unwrap().to_vec();
+            let data = field.bytes().await.map_err(|e| {
+                tracing::error!("Failed to read file bytes: {}", e);
+                StatusCode::BAD_REQUEST
+            })?;
             
-            match state.s3_service.upload_chat_attachment(&chat_id, &filename, data).await {
-                Ok(url) => return Ok(Json(ApiResponse::success(url))),
+            if data.is_empty() {
+                return Ok(Json(ApiResponse::error("File is empty".to_string())));
+            }
+            
+            match state.s3_service.upload_chat_attachment(&chat_id, &filename, data.to_vec()).await {
+                Ok(url) => {
+                    tracing::info!("✅ Chat attachment uploaded successfully: {}", url);
+                    return Ok(Json(ApiResponse::success(url)));
+                }
                 Err(e) => {
-                    tracing::error!("Failed to upload chat attachment: {}", e);
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                    tracing::error!("❌ S3 upload failed: {}", e);
+                    return Ok(Json(ApiResponse::error(format!("Upload failed: {}", e))));
                 }
             }
         }
     }
     
-    Err(StatusCode::BAD_REQUEST)
+    Ok(Json(ApiResponse::error("No file provided".to_string())))
 }
 
 pub async fn get_presigned_url(
     State(state): State<AppState>,
     Path(key): Path<String>,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
-    match state.s3_service.get_presigned_url(&key, 3600).await { // 1 hour expiry
+    match state.s3_service.get_presigned_url(&key, 3600).await {
         Ok(url) => Ok(Json(ApiResponse::success(url))),
         Err(e) => {
             tracing::error!("Failed to generate presigned URL: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            Ok(Json(ApiResponse::error(format!("Failed to generate URL: {}", e))))
         }
     }
 }

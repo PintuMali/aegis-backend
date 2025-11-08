@@ -1,6 +1,7 @@
 use anyhow::Result;
 use aws_sdk_s3::{Client, primitives::ByteStream};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use tokio::time;
 
 #[derive(Clone)]
 pub struct S3Service {
@@ -9,6 +10,28 @@ pub struct S3Service {
 }
 
 impl S3Service {
+
+    pub async fn upload_with_retry(&self, key: &str, data: Vec<u8>, content_type: &str, max_retries: u32) -> Result<String> {
+        let mut last_error = None;
+        
+        for attempt in 1..=max_retries {
+            match self.upload_file(key, data.clone(), content_type).await {
+                Ok(url) => return Ok(url),
+                Err(e) => {
+                    tracing::warn!("S3 upload attempt {} failed: {}", attempt, e);
+                    last_error = Some(e);
+                    
+                    if attempt < max_retries {
+                        let delay = Duration::from_secs(2_u64.pow(attempt - 1)); // Exponential backoff
+                        tokio::time::sleep(delay).await;
+                    }
+                }
+            }
+        }
+        
+        Err(last_error.unwrap())
+    }
+    
     pub fn new(client: Client) -> Self {
         let bucket_name = std::env::var("S3_BUCKET_NAME")
             .unwrap_or_else(|_| "aegis-gaming-assets".to_string());
