@@ -10,6 +10,19 @@ pub async fn create_gaming_table(client: &Client) -> Result<(), Box<dyn std::err
     let table_name = std::env::var("DYNAMODB_TABLE_NAME")
         .unwrap_or_else(|_| "aegis_gaming_table".to_string());
 
+    // 🎯 Enterprise Check: Does table already exist?
+    match client.describe_table().table_name(&table_name).send().await {
+        Ok(_) => {
+            println!("✅ DynamoDB table '{}' already exists - skipping creation", table_name);
+            return Ok(());
+        }
+        Err(_) => {
+            println!("📊 Creating DynamoDB table '{}'...", table_name);
+            // Table doesn't exist, proceed with creation
+        }
+    }
+
+    // Create table only if it doesn't exist
     client
         .create_table()
         .table_name(&table_name)
