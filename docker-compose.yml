@@ -1,0 +1,35 @@
+# docker-compose.yml for local development
+version: '3.8'
+services:
+  aegis-backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - AEGIS_DATABASE__URL=postgresql://user:pass@postgres:5432/aegis
+      - AEGIS_MONGODB__URL=mongodb://mongo:27017
+    depends_on:
+      - postgres
+      - mongo
+
+  postgres:
+    image: postgres:16.6
+    ports:
+      - "5432:5432"  # Add this line
+    environment:
+      POSTGRES_DB: aegis
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mongo:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"  # Add this line
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  postgres_data:
+  mongo_data:
