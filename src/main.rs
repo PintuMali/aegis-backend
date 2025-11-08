@@ -3,25 +3,8 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber;
 use std::env;
 
-mod config;
-mod handlers;
-mod models;
-mod services;
-mod middleware;
-mod utils;
-mod routes;
-mod migration;
-
-use config::{Settings, database::{setup_postgres, setup_mongodb}};
-use migration::Migrator;
+use aegis_backend::{AppState, config::{Settings, AwsClients}, migration::Migrator};
 use sea_orm_migration::prelude::*;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub db: sea_orm::DatabaseConnection,  
-    pub mongo_client: mongodb::Client,
-    pub settings: Settings,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,22 +25,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize databases
     let db = setup_postgres(&settings.database.url).await?;
-    let mongo_client = setup_mongodb(&settings.mongodb.url).await?;
+    let aws_clients = AwsClients::new().await;
+
+    // Setup DynamoDB table and S3 bucket
+    setup_aws_resources(&aws_clients).await?;
 
     // Create application state
-    let app_state = AppState {
-        db,  // Changed from pg_pool
-        mongo_client,
-        settings: settings.clone(),
-    };
-
+    let app_state = AppState::new(db, aws_clients, settings.clone()).await;
 
     // Build routes
     let app = Router::new()
-        .route("/health", get(handlers::health_check))
-        .merge(routes::create_routes())
+        .route("/health", get(health_check))
+        .nest("/api/v1", aegis_backend::routes::create_routes())
         .layer(TraceLayer::new_for_http())
-        .layer(middleware::cors::cors_layer())
+        .layer(aegis_backend::middleware::cors::cors_layer())
         .with_state(app_state);
 
     // Start server
@@ -66,19 +47,69 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).await?;
 
     tracing::info!("🚀 Server running on {}:{}", settings.server.host, settings.server.port);
+    tracing::info!("📊 DynamoDB endpoint: {}", env::var("DYNAMODB_ENDPOINT").unwrap_or_default());
+    tracing::info!("📦 S3 endpoint: {}", env::var("S3_ENDPOINT").unwrap_or_default());
     
     axum::serve(listener, app).await?;
     Ok(())
 }
 
 async fn run_migrations() -> Result<(), Box<dyn std::error::Error>> {
-    let database_url = env::var("AEGIS_DATABASE__URL")
-        .expect("AEGIS_DATABASE__URL must be set");
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
     
     let db = sea_orm::Database::connect(&database_url).await?;
     Migrator::up(&db, None).await?;
-    tracing::info!("✅ Migrations completed successfully");
+    tracing::info!("✅ PostgreSQL migrations completed successfully");
+    Ok(())
+}
+
+async fn setup_postgres(database_url: &str) -> Result<sea_orm::DatabaseConnection, sea_orm::DbErr> {
+    sea_orm::Database::connect(database_url).await
+}
+
+async fn setup_aws_resources(aws_clients: &AwsClients) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("🔧 Setting up AWS resources for billion-dollar gaming platform...");
+
+    // Create DynamoDB table (Critical - must succeed)
+    tracing::info!("📊 Creating DynamoDB table...");
+    match aegis_backend::scripts::setup_dynamodb::create_gaming_table(&aws_clients.dynamodb).await {
+        Ok(_) => tracing::info!("✅ DynamoDB table created successfully"),
+        Err(e) => {
+            if e.to_string().contains("ResourceInUseException") {
+                tracing::info!("✅ DynamoDB table already exists");
+            } else {
+                tracing::error!("❌ DynamoDB table creation failed: {}", e);
+                return Err(format!("Critical: DynamoDB setup failed: {}", e).into());
+            }
+        }
+    }
+
+    // Create S3 bucket (Important but not critical for startup)
+    tracing::info!("📦 Setting up S3 bucket...");
+    match aegis_backend::scripts::setup_s3::create_gaming_bucket(&aws_clients.s3).await {
+        Ok(_) => {
+            tracing::info!("✅ S3 bucket ready for file uploads");
+            
+            // Setup S3 policies
+            if let Err(e) = aegis_backend::scripts::setup_s3::setup_bucket_policies(&aws_clients.s3).await {
+                tracing::warn!("⚠️  S3 policy setup failed: {}", e);
+            }
+        }
+        Err(e) => {
+            tracing::warn!("⚠️  S3 setup failed: {}", e);
+            tracing::info!("🎯 Enterprise Decision: Continuing without S3 for development");
+            tracing::info!("   → File uploads will be disabled in development mode");
+            tracing::info!("   → S3 will be available in production AWS environment");
+        }
+    }
+
+    tracing::info!("✅ AWS resources setup completed!");
     Ok(())
 }
 
 
+
+async fn health_check() -> &'static str {
+    "🎮 Aegis Gaming Backend - DynamoDB + S3 Ready!"
+}

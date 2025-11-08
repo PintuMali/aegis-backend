@@ -1,21 +1,10 @@
-# docker-compose.yml for local development
 version: '3.8'
-services:
-  aegis-backend:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - AEGIS_DATABASE__URL=postgresql://user:pass@postgres:5432/aegis
-      - AEGIS_MONGODB__URL=mongodb://mongo:27017
-    depends_on:
-      - postgres
-      - mongo
 
+services:
   postgres:
     image: postgres:16.6
     ports:
-      - "5432:5432"  # Add this line
+      - "5432:5432"
     environment:
       POSTGRES_DB: aegis
       POSTGRES_USER: user
@@ -23,13 +12,39 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  mongo:
-    image: mongo:7.0
+  # Enhanced LocalStack for S3 compatibility
+  localstack:
+    image: localstack/localstack:latest
     ports:
-      - "27017:27017"  # Add this line
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,s3
+      - DEBUG=1
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - LOCALSTACK_HOST=localhost.localstack.cloud
+      - S3_SKIP_SIGNATURE_VALIDATION=1
     volumes:
-      - mongo_data:/data/db
+      - "./localstack:/var/lib/localstack"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # DynamoDB Admin UI
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin
+    ports:
+      - "8001:8001"
+    environment:
+      - DYNAMO_ENDPOINT=http://localstack:4566
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    depends_on:
+      - localstack
 
 volumes:
   postgres_data:
-  mongo_data:

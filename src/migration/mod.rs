@@ -1,7 +1,5 @@
 pub use sea_orm_migration::prelude::*;
 
-mod m20240101_000001_initial;
-
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -12,3 +10,5 @@ impl MigratorTrait for Migrator {
         ]
     }
 }
+
+mod m20240101_000001_initial;

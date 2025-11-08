@@ -60,7 +60,7 @@ CREATE TABLE player_game_stats (
     kills INTEGER DEFAULT 0,
     game_specific_stats JSONB DEFAULT '{}',
     last_updated TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(player_id, game_type, season)
+    UNIQUE(player_id, game_type)
 );
 
 -- Teams 

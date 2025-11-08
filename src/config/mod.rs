@@ -1,4 +1,5 @@
+pub mod aws;
 pub mod settings;
-pub mod database;
 
+pub use aws::AwsClients;
 pub use settings::Settings;
