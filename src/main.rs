@@ -1,16 +1,20 @@
-use axum::{routing::get, Router};
+use axum::{extract::Request, middleware, response::Response, routing::get, Router};
+use std::env;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber;
-use std::env;
 
-use aegis_backend::{AppState, config::{Settings, AwsClients}, migration::Migrator};
+use aegis_backend::{
+    config::{AwsClients, Settings},
+    migration::Migrator,
+    AppState,
+};
 use sea_orm_migration::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load .env file
     dotenvy::dotenv().ok();
-    
+
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
@@ -37,27 +41,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/health", get(health_check))
         .nest("/api/v1", aegis_backend::routes::create_routes())
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            selective_auth_middleware,
+        ))
         .layer(TraceLayer::new_for_http())
         .layer(aegis_backend::middleware::cors::cors_layer())
         .with_state(app_state);
 
     // Start server
-    let listener = tokio::net::TcpListener::bind(
-        format!("{}:{}", settings.server.host, settings.server.port)
-    ).await?;
+    let listener =
+        tokio::net::TcpListener::bind(format!("{}:{}", settings.server.host, settings.server.port))
+            .await?;
 
-    tracing::info!("🚀 Server running on {}:{}", settings.server.host, settings.server.port);
-    tracing::info!("📊 DynamoDB endpoint: {}", env::var("DYNAMODB_ENDPOINT").unwrap_or_default());
-    tracing::info!("📦 S3 endpoint: {}", env::var("S3_ENDPOINT").unwrap_or_default());
-    
+    tracing::info!(
+        "🚀 Server running on {}:{}",
+        settings.server.host,
+        settings.server.port
+    );
+    tracing::info!(
+        "📊 DynamoDB endpoint: {}",
+        env::var("DYNAMODB_ENDPOINT").unwrap_or_default()
+    );
+    tracing::info!(
+        "📦 S3 endpoint: {}",
+        env::var("S3_ENDPOINT").unwrap_or_default()
+    );
+
     axum::serve(listener, app).await?;
     Ok(())
 }
 
+// Add this middleware function
+async fn selective_auth_middleware(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    req: Request,
+    next: axum::middleware::Next,
+) -> Result<Response, axum::http::StatusCode> {
+    let path = req.uri().path();
+
+    if aegis_backend::routes::api::protected_routes().contains(&path) {
+        aegis_backend::middleware::auth::auth_middleware(axum::extract::State(state), req, next)
+            .await
+    } else {
+        Ok(next.run(req).await)
+    }
+}
+
 async fn run_migrations() -> Result<(), Box<dyn std::error::Error>> {
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
-    
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
     let db = sea_orm::Database::connect(&database_url).await?;
     Migrator::up(&db, None).await?;
     tracing::info!("✅ PostgreSQL migrations completed successfully");
@@ -90,9 +123,11 @@ async fn setup_aws_resources(aws_clients: &AwsClients) -> Result<(), Box<dyn std
     match aegis_backend::scripts::setup_s3::create_gaming_bucket(&aws_clients.s3).await {
         Ok(_) => {
             tracing::info!("✅ S3 bucket ready for file uploads");
-            
+
             // Setup S3 policies
-            if let Err(e) = aegis_backend::scripts::setup_s3::setup_bucket_policies(&aws_clients.s3).await {
+            if let Err(e) =
+                aegis_backend::scripts::setup_s3::setup_bucket_policies(&aws_clients.s3).await
+            {
                 tracing::warn!("⚠️  S3 policy setup failed: {}", e);
             }
         }
@@ -107,8 +142,6 @@ async fn setup_aws_resources(aws_clients: &AwsClients) -> Result<(), Box<dyn std
     tracing::info!("✅ AWS resources setup completed!");
     Ok(())
 }
-
-
 
 async fn health_check() -> &'static str {
     "🎮 Aegis Gaming Backend - DynamoDB + S3 Ready!"

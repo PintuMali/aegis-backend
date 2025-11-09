@@ -8,6 +8,9 @@ pub mod uploads;
 
 pub use chat::*;
 pub use communities::*;
+pub use players::{
+    get_current_player, get_player_by_id, get_player_by_username, login, logout, signup,
+};
 pub use post::*;
 pub use uploads::*;
 

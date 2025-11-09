@@ -1,22 +1,25 @@
 pub mod config;
 pub mod handlers;
-pub mod models;
-pub mod services;
 pub mod middleware;
-pub mod utils;
-pub mod routes;
 pub mod migration;
+pub mod models;
 pub mod repositories;
+pub mod routes;
 pub mod scripts;
+pub mod services;
+pub mod utils;
 
-use repositories::{DynamoRepository, ChatRepository, PostRepository, CommunityRepository};
-use services::{ChatService, PostService, CommunityService, S3Service};
+use repositories::{ChatRepository, CommunityRepository, DynamoRepository, PostRepository};
+use services::{AuthService, ChatService, CommunityService, PlayerService, PostService, S3Service};
+// ... rest of your code
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: sea_orm::DatabaseConnection,
     pub aws: config::AwsClients,
     pub settings: config::Settings,
+    pub auth_service: AuthService,
+    pub player_service: PlayerService,
     pub chat_service: ChatService,
     pub post_service: PostService,
     pub community_service: CommunityService,
@@ -29,6 +32,8 @@ impl AppState {
         aws: config::AwsClients,
         settings: config::Settings,
     ) -> Self {
+        let auth_service = AuthService::new(settings.jwt.secret.clone(), settings.jwt.expiration);
+        let player_service = PlayerService::new(db.clone());
         let dynamo_repo = DynamoRepository::new(aws.dynamodb.clone());
         let chat_repo = ChatRepository::new(dynamo_repo.clone());
         let post_repo = PostRepository::new(dynamo_repo.clone());
@@ -43,6 +48,8 @@ impl AppState {
             db,
             aws,
             settings,
+            auth_service,
+            player_service,
             chat_service,
             post_service,
             community_service,

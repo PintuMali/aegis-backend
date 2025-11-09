@@ -22,6 +22,7 @@ dependencies = [
  "hyper 1.7.0",
  "jsonwebtoken",
  "reqwest",
+ "rust_decimal",
  "sea-orm",
  "sea-orm-migration",
  "serde",
