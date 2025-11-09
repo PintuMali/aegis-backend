@@ -1,16 +1,15 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameEntity {
-    pub pk: String,                    // Partition Key
-    pub sk: String,                    // Sort Key
-    pub entity_type: String,           // "chat", "post", "community", etc.
-    pub gsi1_pk: Option<String>,       // GSI1 Partition Key
-    pub gsi1_sk: Option<String>,       // GSI1 Sort Key
-    pub data: serde_json::Value,       // Entity-specific data
-    pub created_at: String,            // ISO 8601 timestamp
-    pub updated_at: String,            // ISO 8601 timestamp
+    pub pk: String,              // Partition Key
+    pub sk: String,              // Sort Key
+    pub entity_type: String,     // "chat", "post", "community", etc.
+    pub gsi1_pk: Option<String>, // GSI1 Partition Key
+    pub gsi1_sk: Option<String>, // GSI1 Sort Key
+    pub data: serde_json::Value, // Entity-specific data
+    pub created_at: String,      // ISO 8601 timestamp
+    pub updated_at: String,      // ISO 8601 timestamp
 }
 
 impl GameEntity {

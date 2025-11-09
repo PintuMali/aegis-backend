@@ -1,64 +1,67 @@
+use super::chat::ApiResponse;
+use crate::AppState;
 use axum::{
     extract::{Multipart, Path, State},
     http::StatusCode,
     response::Json,
 };
-use crate::AppState;
-use super::chat::ApiResponse;
 
 pub async fn upload_profile_picture(
-    State(state): State<AppState>,
     Path(user_id): Path<String>,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
-    tracing::info!("📸 Development mode: Processing profile picture upload for user: {}", user_id);
+    tracing::info!(
+        "📸 Development mode: Processing profile picture upload for user: {}",
+        user_id
+    );
 
     while let Some(field) = multipart.next_field().await.map_err(|e| {
         tracing::error!("Multipart field error: {}", e);
         StatusCode::BAD_REQUEST
     })? {
-        
         let name = field.name().unwrap_or("").to_string();
-        
+
         if name == "file" {
             let filename = field.file_name().unwrap_or("avatar.jpg").to_string();
             let data = field.bytes().await.map_err(|e| {
                 tracing::error!("Failed to read file bytes: {}", e);
                 StatusCode::BAD_REQUEST
             })?;
-            
+
             if data.is_empty() {
                 return Ok(Json(ApiResponse::error("File is empty".to_string())));
             }
-            
+
             // Development mode: Save to local filesystem
-            let upload_dir = std::env::var("FILE_STORAGE_PATH").unwrap_or_else(|_| "C:\\temp\\gaming-uploads".to_string());
+            let upload_dir = std::env::var("FILE_STORAGE_PATH")
+                .unwrap_or_else(|_| "C:\\temp\\gaming-uploads".to_string());
             let user_dir = format!("{}\\profiles\\{}", upload_dir, user_id);
-            
+
             // Create directory if it doesn't exist
             if let Err(e) = std::fs::create_dir_all(&user_dir) {
                 tracing::error!("Failed to create upload directory: {}", e);
-                return Ok(Json(ApiResponse::error("Failed to create upload directory".to_string())));
+                return Ok(Json(ApiResponse::error(
+                    "Failed to create upload directory".to_string(),
+                )));
             }
-            
+
             let file_path = format!("{}\\{}", user_dir, filename);
-            
+
             // Save file
             if let Err(e) = std::fs::write(&file_path, &data) {
                 tracing::error!("Failed to save file: {}", e);
                 return Ok(Json(ApiResponse::error("Failed to save file".to_string())));
             }
-            
+
             let file_url = format!("file://{}", file_path);
             tracing::info!("✅ File saved locally: {}", file_url);
-            
+
             return Ok(Json(ApiResponse::success(file_url)));
         }
     }
-    
+
     Ok(Json(ApiResponse::error("No file provided".to_string())))
 }
-
 
 pub async fn upload_chat_attachment(
     State(state): State<AppState>,
@@ -71,21 +74,24 @@ pub async fn upload_chat_attachment(
         tracing::error!("Multipart field error: {}", e);
         StatusCode::BAD_REQUEST
     })? {
-        
         let name = field.name().unwrap_or("").to_string();
-        
+
         if name == "file" {
             let filename = field.file_name().unwrap_or("attachment").to_string();
             let data = field.bytes().await.map_err(|e| {
                 tracing::error!("Failed to read file bytes: {}", e);
                 StatusCode::BAD_REQUEST
             })?;
-            
+
             if data.is_empty() {
                 return Ok(Json(ApiResponse::error("File is empty".to_string())));
             }
-            
-            match state.s3_service.upload_chat_attachment(&chat_id, &filename, data.to_vec()).await {
+
+            match state
+                .s3_service
+                .upload_chat_attachment(&chat_id, &filename, data.to_vec())
+                .await
+            {
                 Ok(url) => {
                     tracing::info!("✅ Chat attachment uploaded successfully: {}", url);
                     return Ok(Json(ApiResponse::success(url)));
@@ -97,7 +103,7 @@ pub async fn upload_chat_attachment(
             }
         }
     }
-    
+
     Ok(Json(ApiResponse::error("No file provided".to_string())))
 }
 
@@ -109,7 +115,10 @@ pub async fn get_presigned_url(
         Ok(url) => Ok(Json(ApiResponse::success(url))),
         Err(e) => {
             tracing::error!("Failed to generate presigned URL: {}", e);
-            Ok(Json(ApiResponse::error(format!("Failed to generate URL: {}", e))))
+            Ok(Json(ApiResponse::error(format!(
+                "Failed to generate URL: {}",
+                e
+            ))))
         }
     }
 }

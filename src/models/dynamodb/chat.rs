@@ -1,14 +1,13 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use super::entity::GameEntity;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Chat {
     pub id: String,
-    pub chat_type: String,             // "general", "team", "tournament"
+    pub chat_type: String, // "general", "team", "tournament"
     pub name: String,
-    pub participants: Vec<String>,     // Player UUIDs
-    pub created_by: String,            // Player UUID
+    pub participants: Vec<String>, // Player UUIDs
+    pub created_by: String,        // Player UUID
     pub created_at: String,
     pub updated_at: String,
 }
@@ -17,9 +16,9 @@ pub struct Chat {
 pub struct ChatMessage {
     pub id: String,
     pub chat_id: String,
-    pub sender: String,                // Player UUID
+    pub sender: String, // Player UUID
     pub message: String,
-    pub message_type: String,          // "text", "image", "file"
+    pub message_type: String, // "text", "image", "file"
     pub timestamp: String,
 }
 
@@ -40,7 +39,7 @@ impl ChatMessage {
         GameEntity::new(
             "message",
             &format!("CHAT#{}", self.chat_id),
-            &format!("MSG#{}", self.timestamp)
+            &format!("MSG#{}", self.timestamp),
         )
         .with_gsi(&format!("USER#{}", self.sender), &self.timestamp)
         .with_data(self)
