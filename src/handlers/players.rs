@@ -40,12 +40,10 @@ pub async fn signup(
     State(state): State<AppState>,
     Json(payload): Json<SignupRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
-    let player = state
+    let (player, token) = state // FIX: Destructure tuple
         .player_service
         .create_player(payload.email, payload.username, payload.password)
         .await?;
-
-    let token = state.auth_service.generate_jwt(player.id)?;
 
     Ok(Json(AuthResponse {
         message: "Signup successful".to_string(),
@@ -62,13 +60,11 @@ pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, AppError> {
-    let player = state
+    let (player, token) = state // FIX: Destructure tuple
         .player_service
         .authenticate(payload.email, payload.password)
         .await?
         .ok_or(AppError::Unauthorized)?;
-
-    let token = state.auth_service.generate_jwt(player.id)?;
 
     Ok(Json(AuthResponse {
         message: "Login successful".to_string(),

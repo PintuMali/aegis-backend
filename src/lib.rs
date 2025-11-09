@@ -10,8 +10,10 @@ pub mod services;
 pub mod utils;
 
 use repositories::{ChatRepository, CommunityRepository, DynamoRepository, PostRepository};
-use services::{AuthService, ChatService, CommunityService, PlayerService, PostService, S3Service};
-// ... rest of your code
+use services::{
+    AdminService, AuthService, ChatService, CommunityService, OrganizationService, PlayerService,
+    PostService, S3Service,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -20,6 +22,8 @@ pub struct AppState {
     pub settings: config::Settings,
     pub auth_service: AuthService,
     pub player_service: PlayerService,
+    pub admin_service: AdminService,
+    pub organization_service: OrganizationService,
     pub chat_service: ChatService,
     pub post_service: PostService,
     pub community_service: CommunityService,
@@ -33,7 +37,10 @@ impl AppState {
         settings: config::Settings,
     ) -> Self {
         let auth_service = AuthService::new(settings.jwt.secret.clone(), settings.jwt.expiration);
-        let player_service = PlayerService::new(db.clone());
+        let player_service = PlayerService::new(db.clone(), auth_service.clone());
+        let admin_service = AdminService::new(db.clone(), auth_service.clone());
+        let organization_service = OrganizationService::new(db.clone(), auth_service.clone());
+
         let dynamo_repo = DynamoRepository::new(aws.dynamodb.clone());
         let chat_repo = ChatRepository::new(dynamo_repo.clone());
         let post_repo = PostRepository::new(dynamo_repo.clone());
@@ -50,6 +57,8 @@ impl AppState {
             settings,
             auth_service,
             player_service,
+            admin_service,
+            organization_service,
             chat_service,
             post_service,
             community_service,
