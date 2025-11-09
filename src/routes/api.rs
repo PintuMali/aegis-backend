@@ -6,12 +6,23 @@ use axum::{
 
 pub fn create_routes() -> Router<AppState> {
     Router::new()
-        // Player routes
+        // Player authentication routes
         .route("/players/signup", post(handlers::signup))
         .route("/players/login", post(handlers::login))
+        .route("/players/logout", post(handlers::logout))
+        .route("/players/forgot-password", post(handlers::forgot_password))
+        .route(
+            "/players/reset-password/:token",
+            post(handlers::reset_password),
+        )
+        .route("/players/verify-email/:token", post(handlers::verify_email))
+        .route(
+            "/players/send-verification",
+            post(handlers::send_verification_email),
+        )
+        // Player info routes
         .route("/players/:id", get(handlers::get_player_by_id))
         .route("/players/me", get(handlers::get_current_player))
-        .route("/players/logout", post(handlers::logout))
         .route(
             "/players/username/:username",
             get(handlers::get_player_by_username),
@@ -56,6 +67,7 @@ pub fn create_routes() -> Router<AppState> {
 pub fn protected_routes() -> Vec<&'static str> {
     vec![
         "/api/v1/players/me",
+        "/api/v1/players/send-verification",
         // Add more protected routes here
     ]
 }

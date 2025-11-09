@@ -1,4 +1,3 @@
-// src/services/player_service.rs
 use crate::models::postgres::{player, Player};
 use crate::services::auth_service::{AuthService, UserType};
 use crate::utils::errors::AppError;
@@ -16,6 +15,75 @@ pub struct PlayerService {
 impl PlayerService {
     pub fn new(db: DatabaseConnection, auth_service: AuthService) -> Self {
         Self { db, auth_service }
+    }
+
+    pub async fn send_verification_email(&self, player_id: Uuid) -> Result<String, AppError> {
+        let player = self.get_by_id(player_id).await?.ok_or(AppError::NotFound)?;
+
+        if player.verified {
+            return Err(AppError::Validation("Email already verified".to_string()));
+        }
+
+        // Generate verification token and store it using reset_password fields temporarily
+        let verification_token = uuid::Uuid::new_v4().to_string();
+        let expiry = chrono::Utc::now() + chrono::Duration::hours(24);
+
+        // Reuse reset_password fields for verification (enterprise pattern)
+        let mut player_update: player::ActiveModel = player.into();
+        player_update.reset_password_token = Set(Some(format!("verify_{}", verification_token)));
+        player_update.reset_password_expiry = Set(Some(expiry));
+
+        Player::update(player_update).exec(&self.db).await?;
+        Ok(verification_token)
+    }
+
+    pub async fn verify_email_by_token(&self, token: String) -> Result<bool, AppError> {
+        let now = chrono::Utc::now();
+        let verification_token = format!("verify_{}", token);
+
+        // Find player with valid verification token
+        let player = Player::find()
+            .filter(player::Column::ResetPasswordToken.eq(Some(verification_token)))
+            .filter(player::Column::ResetPasswordExpiry.gt(now))
+            .one(&self.db)
+            .await?;
+
+        if let Some(p) = player {
+            let mut player_update: player::ActiveModel = p.into();
+            player_update.verified = Set(true);
+            player_update.reset_password_token = Set(None);
+            player_update.reset_password_expiry = Set(None);
+            player_update.updated_at = Set(now);
+
+            Player::update(player_update).exec(&self.db).await?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub async fn request_password_reset(&self, email: String) -> Result<Option<String>, AppError> {
+        let player = Player::find()
+            .filter(player::Column::Email.eq(email))
+            .one(&self.db)
+            .await?;
+
+        if let Some(p) = player {
+            let reset_token = uuid::Uuid::new_v4().to_string();
+            let expiry = chrono::Utc::now() + chrono::Duration::hours(1);
+
+            let success = self
+                .set_reset_token(p.email.clone(), reset_token.clone(), expiry)
+                .await?;
+
+            if success {
+                Ok(Some(reset_token))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     pub async fn create_player(

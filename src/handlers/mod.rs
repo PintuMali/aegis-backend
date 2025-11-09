@@ -9,7 +9,8 @@ pub mod uploads;
 pub use chat::*;
 pub use communities::*;
 pub use players::{
-    get_current_player, get_player_by_id, get_player_by_username, login, logout, signup,
+    forgot_password, get_current_player, get_player_by_id, get_player_by_username, login, logout,
+    reset_password, send_verification_email, signup, verify_email,
 };
 pub use post::*;
 pub use uploads::*;

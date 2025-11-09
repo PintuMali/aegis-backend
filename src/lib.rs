@@ -11,8 +11,8 @@ pub mod utils;
 
 use repositories::{ChatRepository, CommunityRepository, DynamoRepository, PostRepository};
 use services::{
-    AdminService, AuthService, ChatService, CommunityService, OrganizationService, PlayerService,
-    PostService, S3Service,
+    AdminService, AuthService, ChatService, CommunityService, EmailService, OrganizationService,
+    PlayerService, PostService, S3Service,
 };
 
 #[derive(Clone)]
@@ -24,6 +24,7 @@ pub struct AppState {
     pub player_service: PlayerService,
     pub admin_service: AdminService,
     pub organization_service: OrganizationService,
+    pub email_service: EmailService,
     pub chat_service: ChatService,
     pub post_service: PostService,
     pub community_service: CommunityService,
@@ -37,6 +38,8 @@ impl AppState {
         settings: config::Settings,
     ) -> Self {
         let auth_service = AuthService::new(settings.jwt.secret.clone(), settings.jwt.expiration);
+        let email_service =
+            EmailService::new(settings.email.clone()).expect("Failed to initialize email service");
         let player_service = PlayerService::new(db.clone(), auth_service.clone());
         let admin_service = AdminService::new(db.clone(), auth_service.clone());
         let organization_service = OrganizationService::new(db.clone(), auth_service.clone());
@@ -59,6 +62,7 @@ impl AppState {
             player_service,
             admin_service,
             organization_service,
+            email_service,
             chat_service,
             post_service,
             community_service,
