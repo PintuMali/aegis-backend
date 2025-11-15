@@ -12,26 +12,71 @@ pub async fn jwt_auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    let token = extract_token_from_request(&request)?;
+    println!("DEBUG: JWT middleware - extracting token");
 
-    // Verify JWT
-    let claims = state.auth_service.verify_jwt(&token)?;
+    let token = match extract_token_from_request(&request) {
+        Ok(t) => {
+            println!("DEBUG: Token extracted successfully (length: {})", t.len());
+            t
+        }
+        Err(e) => {
+            println!("DEBUG: Token extraction failed: {:?}", e);
+            return Err(e);
+        }
+    };
 
-    // Validate session exists and is active
-    let session = state
+    println!("DEBUG: JWT middleware - verifying JWT");
+    let claims = match state.auth_service.verify_jwt(&token) {
+        Ok(c) => {
+            println!(
+                "DEBUG: JWT verification successful, session_id: {}",
+                c.session_id
+            );
+            c
+        }
+        Err(e) => {
+            println!("DEBUG: JWT verification failed: {:?}", e);
+            return Err(e);
+        }
+    };
+
+    println!(
+        "DEBUG: JWT middleware - validating session: {}",
+        claims.session_id
+    );
+    let session = match state
         .session_service
         .validate_session(&claims.session_id)
-        .await?
-        .ok_or(AppError::Unauthorized)?;
+        .await
+    {
+        Ok(Some(s)) => {
+            println!(
+                "DEBUG: Session validation successful, user_id: {}",
+                s.user_id
+            );
+            s
+        }
+        Ok(None) => {
+            println!("DEBUG: Session not found in database");
+            return Err(AppError::Unauthorized);
+        }
+        Err(e) => {
+            println!("DEBUG: Session validation error: {:?}", e);
+            return Err(e);
+        }
+    };
 
-    // Ensure session belongs to the user
+    println!("DEBUG: JWT middleware - checking user match");
     if session.user_id.to_string() != claims.sub {
+        println!(
+            "DEBUG: User ID mismatch - session: {}, claims: {}",
+            session.user_id, claims.sub
+        );
         return Err(AppError::Unauthorized);
     }
 
-    // Add claims to request extensions
+    println!("DEBUG: JWT middleware - all checks passed");
     request.extensions_mut().insert(claims);
-
     Ok(next.run(request).await)
 }
 

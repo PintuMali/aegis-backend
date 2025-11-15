@@ -85,15 +85,31 @@ async fn selective_auth_middleware(
 ) -> Result<Response, axum::http::StatusCode> {
     let path = req.uri().path();
 
+    println!("DEBUG: Middleware checking path: {}", path);
+
     if aegis_backend::routes::api::protected_routes().contains(&path) {
-        aegis_backend::middleware::auth::jwt_auth_middleware(axum::extract::State(state), req, next)
-            .await
-            .map_err(|_| axum::http::StatusCode::UNAUTHORIZED)
+        println!("DEBUG: Path is protected, checking JWT");
+        match aegis_backend::middleware::auth::jwt_auth_middleware(
+            axum::extract::State(state),
+            req,
+            next,
+        )
+        .await
+        {
+            Ok(response) => {
+                println!("DEBUG: JWT middleware succeeded");
+                Ok(response)
+            }
+            Err(e) => {
+                println!("DEBUG: JWT middleware failed: {:?}", e);
+                Err(axum::http::StatusCode::UNAUTHORIZED)
+            }
+        }
     } else {
+        println!("DEBUG: Path is not protected, allowing through");
         Ok(next.run(req).await)
     }
 }
-
 async fn run_migrations() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 

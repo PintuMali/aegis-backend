@@ -48,10 +48,14 @@ impl SessionService {
 
     pub async fn validate_session(
         &self,
-        session_token: &str,
+        session_id: &str, // Changed parameter name for clarity
     ) -> Result<Option<user_session::Model>, AppError> {
+        let session_uuid = session_id
+            .parse::<Uuid>()
+            .map_err(|_| AppError::Validation("Invalid session ID format".to_string()))?;
+
         let session = UserSession::find()
-            .filter(user_session::Column::SessionToken.eq(session_token))
+            .filter(user_session::Column::Id.eq(session_uuid)) // ✅ FIXED: Use ID instead of SessionToken
             .filter(user_session::Column::Revoked.eq(false))
             .filter(user_session::Column::ExpiresAt.gt(Utc::now()))
             .one(&self.db)
