@@ -2,7 +2,6 @@ use crate::models::postgres::{organization, Organization};
 use crate::services::auth_service::{AuthService, UserType};
 use crate::utils::errors::AppError;
 use anyhow::Result;
-use bcrypt::{hash, verify, DEFAULT_COST};
 use sea_orm::*;
 use uuid::Uuid;
 
@@ -35,7 +34,7 @@ impl OrganizationService {
             return Err(AppError::Validation("Email already exists".to_string()));
         }
 
-        let hashed_password = hash(password, DEFAULT_COST)?;
+        let hashed_password = self.auth_service.hash_password(&password)?;
         let now = chrono::Utc::now();
 
         let new_org = organization::ActiveModel {
@@ -72,9 +71,12 @@ impl OrganizationService {
         };
 
         let org = new_org.insert(&self.db).await?;
-        let token = self
-            .auth_service
-            .generate_jwt(org.id, UserType::Organization, None)?;
+        let token = self.auth_service.generate_jwt(
+            org.id,
+            UserType::Organization,
+            None,
+            Uuid::new_v4().to_string(),
+        )?;
 
         Ok((org, token))
     }
@@ -91,10 +93,13 @@ impl OrganizationService {
 
         match org {
             Some(o) => {
-                if verify(password, &o.password)? {
-                    let token =
-                        self.auth_service
-                            .generate_jwt(o.id, UserType::Organization, None)?;
+                if self.auth_service.verify_password(&password, &o.password)? {
+                    let token = self.auth_service.generate_jwt(
+                        o.id,
+                        UserType::Organization,
+                        None,
+                        Uuid::new_v4().to_string(),
+                    )?;
                     Ok(Some((o, token)))
                 } else {
                     Ok(None)

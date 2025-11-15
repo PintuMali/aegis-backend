@@ -68,7 +68,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         env::var("S3_ENDPOINT").unwrap_or_default()
     );
 
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
+
     Ok(())
 }
 
@@ -81,8 +86,9 @@ async fn selective_auth_middleware(
     let path = req.uri().path();
 
     if aegis_backend::routes::api::protected_routes().contains(&path) {
-        aegis_backend::middleware::auth::auth_middleware(axum::extract::State(state), req, next)
+        aegis_backend::middleware::auth::jwt_auth_middleware(axum::extract::State(state), req, next)
             .await
+            .map_err(|_| axum::http::StatusCode::UNAUTHORIZED)
     } else {
         Ok(next.run(req).await)
     }

@@ -6,34 +6,35 @@ use axum::{
 
 pub fn create_routes() -> Router<AppState> {
     Router::new()
-        // Player authentication routes
-        .route("/players/signup", post(handlers::signup))
-        .route("/players/login", post(handlers::login))
-        .route("/players/logout", post(handlers::logout))
-        .route("/players/forgot-password", post(handlers::forgot_password))
+        // Core auth endpoints
+        .route("/auth/login", post(handlers::auth_login))
+        .route("/auth/register", post(handlers::auth_register))
+        .route("/auth/logout", post(handlers::auth_logout))
+        .route("/auth/refresh", post(handlers::refresh_token))
+        .route("/auth/revoke-sessions", post(handlers::revoke_all_sessions))
+        .route("/auth/forgot-password", post(handlers::forgot_password))
         .route(
-            "/players/reset-password/:token",
+            "/auth/reset-password/:token",
             post(handlers::reset_password),
         )
-        .route("/players/verify-email/:token", post(handlers::verify_email))
+        .route("/auth/verify-email/:token", post(handlers::verify_email))
         .route(
-            "/players/send-verification",
+            "/auth/send-verification",
             post(handlers::send_verification_email),
         )
-        // Player info routes
+        // Player endpoints
         .route("/players/:id", get(handlers::get_player_by_id))
         .route("/players/me", get(handlers::get_current_player))
         .route(
             "/players/username/:username",
             get(handlers::get_player_by_username),
         )
-        // Chat routes
+        // Protected resources
         .route("/chats", post(handlers::create_chat))
         .route("/chats/:chat_id", get(handlers::get_chat))
         .route("/chats/:chat_id/messages", post(handlers::send_message))
         .route("/chats/:chat_id/messages", get(handlers::get_messages))
         .route("/chats/:chat_id/join/:user_id", post(handlers::join_chat))
-        // Community routes
         .route("/communities", post(handlers::create_community))
         .route("/communities/:community_id", get(handlers::get_community))
         .route(
@@ -52,7 +53,6 @@ pub fn create_routes() -> Router<AppState> {
             "/communities/:community_id/leave/:user_id",
             post(handlers::leave_community),
         )
-        // Upload routes
         .route(
             "/uploads/profile/:user_id",
             post(handlers::upload_profile_picture),
@@ -67,7 +67,18 @@ pub fn create_routes() -> Router<AppState> {
 pub fn protected_routes() -> Vec<&'static str> {
     vec![
         "/api/v1/players/me",
-        "/api/v1/players/send-verification",
-        // Add more protected routes here
+        "/api/v1/auth/logout",
+        "/api/v1/auth/refresh",
+        "/api/v1/auth/revoke-sessions",
+        "/api/v1/auth/send-verification",
+        "/api/v1/chats",
+        "/api/v1/chats/:chat_id/messages",
+        "/api/v1/chats/:chat_id/join/:user_id",
+        "/api/v1/communities",
+        "/api/v1/communities/:community_id/posts",
+        "/api/v1/communities/:community_id/join/:user_id",
+        "/api/v1/communities/:community_id/leave/:user_id",
+        "/api/v1/uploads/profile/:user_id",
+        "/api/v1/uploads/chat/:chat_id",
     ]
 }

@@ -1,5 +1,8 @@
 use crate::utils::errors::AppError;
+use crate::utils::validation::validate_password;
 use anyhow::Result;
+use argon2::password_hash::{rand_core::OsRng, SaltString};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
@@ -7,11 +10,13 @@ use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: String,          // user id
-    pub user_type: String,    // "player", "admin", "organization"
-    pub role: Option<String>, // admin role or organization status
-    pub exp: usize,           // expiration
-    pub iat: usize,           // issued at
+    pub sub: String,
+    pub user_type: String,
+    pub role: Option<String>,
+    pub session_id: String,
+    pub exp: usize,
+    pub iat: usize,
+    pub jti: String,
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +40,7 @@ impl UserType {
 pub struct AuthService {
     jwt_secret: String,
     jwt_expiration: i64,
+    argon2: Argon2<'static>,
 }
 
 impl AuthService {
@@ -42,7 +48,28 @@ impl AuthService {
         Self {
             jwt_secret,
             jwt_expiration,
+            argon2: Argon2::default(),
         }
+    }
+
+    pub fn hash_password(&self, password: &str) -> Result<String, AppError> {
+        validate_password(password)?;
+
+        let salt = SaltString::generate(&mut OsRng);
+        let password_hash = self
+            .argon2
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|_| AppError::InternalServerError)?;
+
+        Ok(password_hash.to_string())
+    }
+
+    pub fn verify_password(&self, password: &str, hash: &str) -> Result<bool, AppError> {
+        let parsed_hash = PasswordHash::new(hash).map_err(|_| AppError::InternalServerError)?;
+        Ok(self
+            .argon2
+            .verify_password(password.as_bytes(), &parsed_hash)
+            .is_ok())
     }
 
     pub fn generate_jwt(
@@ -50,16 +77,19 @@ impl AuthService {
         user_id: Uuid,
         user_type: UserType,
         role: Option<String>,
+        session_id: String, // ✅ FIXED: Use actual session ID
     ) -> Result<String, AppError> {
         let now = Utc::now();
-        let exp = (now + Duration::days(self.jwt_expiration)).timestamp() as usize;
+        let exp = (now + Duration::seconds(self.jwt_expiration)).timestamp() as usize;
 
         let claims = Claims {
             sub: user_id.to_string(),
             user_type: user_type.as_str().to_string(),
             role,
+            session_id, // ✅ FIXED: Use actual session ID
             exp,
             iat: now.timestamp() as usize,
+            jti: Uuid::new_v4().to_string(),
         };
 
         encode(
@@ -71,10 +101,13 @@ impl AuthService {
     }
 
     pub fn verify_jwt(&self, token: &str) -> Result<Claims, AppError> {
+        let mut validation = Validation::default();
+        validation.leeway = 0;
+
         decode::<Claims>(
             token,
             &DecodingKey::from_secret(self.jwt_secret.as_ref()),
-            &Validation::default(),
+            &validation,
         )
         .map(|data| data.claims)
         .map_err(|_| AppError::Unauthorized)

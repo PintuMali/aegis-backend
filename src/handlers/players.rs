@@ -48,7 +48,7 @@ pub struct PlayerResponse {
 
 fn create_auth_cookie(token: &str) -> String {
     format!(
-        "token={}; HttpOnly; SameSite=Lax; Max-Age={}; Path=/",
+        "token={}; HttpOnly; SameSite=Lax; Max-Age={}; Path=/; Secure",
         token,
         7 * 24 * 60 * 60 // 7 days
     )
@@ -111,7 +111,7 @@ pub async fn logout() -> Result<(HeaderMap, Json<serde_json::Value>), AppError> 
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,
-        "token=; HttpOnly; SameSite=Lax; Max-Age=0; Path=/"
+        "token=; HttpOnly; SameSite=Lax; Max-Age=0; Path=/; Secure"
             .parse()
             .unwrap(),
     );
@@ -190,7 +190,6 @@ pub async fn send_verification_email(
         .send_verification_email(player_id)
         .await?;
 
-    // Get player email for sending
     let player = state
         .player_service
         .get_by_id(player_id)

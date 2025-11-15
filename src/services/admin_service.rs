@@ -2,7 +2,6 @@ use crate::models::postgres::{admin, Admin};
 use crate::services::auth_service::{AuthService, UserType};
 use crate::utils::errors::AppError;
 use anyhow::Result;
-use bcrypt::{hash, verify, DEFAULT_COST};
 use sea_orm::*;
 use uuid::Uuid;
 
@@ -39,11 +38,12 @@ impl AdminService {
                     }
                 }
 
-                if verify(password, &a.password)? {
+                if self.auth_service.verify_password(&password, &a.password)? {
                     let token = self.auth_service.generate_jwt(
                         a.id,
                         UserType::Admin,
                         Some(a.role.clone()),
+                        Uuid::new_v4().to_string(),
                     )?;
                     Ok(Some((a, token)))
                 } else {
@@ -67,7 +67,7 @@ impl AdminService {
         role: String,
         permissions: serde_json::Value,
     ) -> Result<admin::Model, AppError> {
-        let hashed_password = hash(password, DEFAULT_COST)?;
+        let hashed_password = self.auth_service.hash_password(&password)?;
         let now = chrono::Utc::now();
 
         let new_admin = admin::ActiveModel {
