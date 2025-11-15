@@ -64,6 +64,31 @@ impl SessionService {
         Ok(session)
     }
 
+    pub async fn revoke_session_by_id(&self, session_id: &str) -> Result<(), AppError> {
+        let session_uuid = session_id
+            .parse::<Uuid>()
+            .map_err(|_| AppError::Validation("Invalid session ID format".to_string()))?;
+
+        UserSession::update_many()
+            .col_expr(
+                user_session::Column::Revoked,
+                Expr::value(Value::Bool(Some(true))),
+            )
+            .col_expr(
+                user_session::Column::RevokedAt,
+                Expr::value(Value::ChronoDateTimeUtc(Some(Box::new(Utc::now())))),
+            )
+            .col_expr(
+                user_session::Column::UpdatedAt,
+                Expr::value(Value::ChronoDateTimeUtc(Some(Box::new(Utc::now())))),
+            )
+            .filter(user_session::Column::Id.eq(session_uuid))
+            .exec(&self.db)
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn revoke_session(&self, session_token: &str) -> Result<(), AppError> {
         UserSession::update_many()
             .col_expr(

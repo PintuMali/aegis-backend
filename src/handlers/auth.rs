@@ -708,7 +708,7 @@ pub async fn logout(
     // Revoke current session
     state
         .session_service
-        .revoke_session(&claims.session_id)
+        .revoke_session_by_id(&claims.session_id)
         .await?;
 
     // Audit log

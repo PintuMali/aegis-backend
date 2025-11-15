@@ -101,15 +101,37 @@ impl AuthService {
     }
 
     pub fn verify_jwt(&self, token: &str) -> Result<Claims, AppError> {
+        println!("DEBUG: JWT verification - token length: {}", token.len());
+        println!(
+            "DEBUG: JWT verification - secret length: {}",
+            self.jwt_secret.len()
+        );
+
         let mut validation = Validation::default();
         validation.leeway = 0;
 
-        decode::<Claims>(
+        match decode::<Claims>(
             token,
             &DecodingKey::from_secret(self.jwt_secret.as_ref()),
             &validation,
-        )
-        .map(|data| data.claims)
-        .map_err(|_| AppError::Unauthorized)
+        ) {
+            Ok(data) => {
+                println!("DEBUG: JWT verification successful");
+                println!(
+                    "DEBUG: Claims - sub: {}, exp: {}",
+                    data.claims.sub, data.claims.exp
+                );
+                let now = chrono::Utc::now().timestamp() as usize;
+                println!(
+                    "DEBUG: Current time: {}, Token exp: {}",
+                    now, data.claims.exp
+                );
+                Ok(data.claims)
+            }
+            Err(e) => {
+                println!("DEBUG: JWT verification error: {:?}", e);
+                Err(AppError::Unauthorized)
+            }
+        }
     }
 }
