@@ -1,3 +1,4 @@
+use crate::models::enums::BattleStatus;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -11,7 +12,7 @@ pub struct Model {
     pub tournament: Uuid,
     pub tournament_phase: Option<String>,
     pub scheduled_start_time: ChronoDateTimeUtc,
-    pub status: String,
+    pub status: BattleStatus,
     pub map: Option<String>,
     pub participating_groups: Vec<String>,
     pub participating_teams: Json,

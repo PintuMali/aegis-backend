@@ -1,3 +1,4 @@
+use crate::models::enums::AdminRole;
 use crate::models::postgres::{admin, Admin};
 use crate::services::auth_service::{AuthService, UserType};
 use crate::utils::errors::AppError;
@@ -42,7 +43,7 @@ impl AdminService {
                     let token = self.auth_service.generate_jwt(
                         a.id,
                         UserType::Admin,
-                        Some(a.role.clone()),
+                        Some(a.role.as_str().to_string()),
                         Uuid::new_v4().to_string(),
                     )?;
                     Ok(Some((a, token)))
@@ -64,7 +65,7 @@ impl AdminService {
         username: String,
         email: String,
         password: String,
-        role: String,
+        role: AdminRole,
         permissions: serde_json::Value,
     ) -> Result<admin::Model, AppError> {
         let hashed_password = self.auth_service.hash_password(&password)?;

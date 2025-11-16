@@ -1,3 +1,4 @@
+use crate::models::enums::InviteStatus;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -11,7 +12,7 @@ pub struct Model {
     pub team: Uuid,
     pub phase: String,
     pub organizer: Uuid,
-    pub status: String,
+    pub status: InviteStatus,
     pub message: Option<String>,
     pub expires_at: ChronoDateTimeUtc,
     pub created_at: ChronoDateTimeUtc,

@@ -1,3 +1,4 @@
+use crate::models::enums::GameType;
 use crate::models::postgres::{player_game_stats, PlayerGameStats};
 use crate::utils::errors::AppError;
 use sea_orm::*;
@@ -26,7 +27,7 @@ impl PlayerGameStatsService {
     pub async fn get_player_game_stats(
         &self,
         player_id: Uuid,
-        game_type: String,
+        game_type: GameType,
     ) -> Result<Option<player_game_stats::Model>, AppError> {
         Ok(PlayerGameStats::find()
             .filter(player_game_stats::Column::PlayerId.eq(player_id))
@@ -38,7 +39,7 @@ impl PlayerGameStatsService {
     pub async fn update_stats(
         &self,
         player_id: Uuid,
-        game_type: String,
+        game_type: GameType,
         wins: Option<i32>,
         kills: Option<i32>,
         battles_played: Option<i32>,

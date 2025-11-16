@@ -1,3 +1,4 @@
+use crate::models::enums::{ApprovalStatus, TournamentStatus};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -22,7 +23,7 @@ pub struct Model {
     pub registration_end_date: Option<ChronoDateTimeUtc>,
     pub start_date: ChronoDateTimeUtc,
     pub end_date: ChronoDateTimeUtc,
-    pub status: String,
+    pub status: TournamentStatus,
     pub format: Option<String>,
     pub format_details: Option<String>,
     pub slots: Json,
@@ -47,7 +48,7 @@ pub struct Model {
     pub tags: Vec<String>,
     pub notes: Option<String>,
     pub external_ids: Json,
-    pub approval_status: String,
+    pub approval_status: ApprovalStatus,
     pub submitted_by: Option<Uuid>,
     pub submitted_at: Option<ChronoDateTimeUtc>,
     pub approved_by: Option<Uuid>,

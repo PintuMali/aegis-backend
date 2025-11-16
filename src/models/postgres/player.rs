@@ -1,3 +1,4 @@
+use crate::models::enums::GameType;
 use rust_decimal::Decimal;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -20,7 +21,7 @@ pub struct Model {
     pub country: Option<String>,
     pub bio: String,
     pub profile_picture: String,
-    pub primary_game: Option<String>,
+    pub primary_game: Option<GameType>,
     pub earnings: Decimal,
     pub in_game_role: Vec<String>,
     pub location: Option<String>,

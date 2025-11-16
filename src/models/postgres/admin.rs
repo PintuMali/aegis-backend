@@ -1,3 +1,4 @@
+use crate::models::enums::AdminRole;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -10,7 +11,7 @@ pub struct Model {
     pub username: String,
     pub email: String,
     pub password: String,
-    pub role: String,
+    pub role: AdminRole,
     pub permissions: Json,
     pub is_active: bool,
     pub last_login: Option<ChronoDateTimeUtc>,

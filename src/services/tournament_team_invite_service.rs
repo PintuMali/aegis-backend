@@ -1,3 +1,4 @@
+use crate::models::enums::InviteStatus;
 use crate::models::postgres::{tournament_team_invite, TournamentTeamInvite};
 use crate::utils::errors::AppError;
 use sea_orm::{sea_query::Expr, *};
@@ -32,7 +33,7 @@ impl TournamentTeamInviteService {
             expires_at: Set(expires_at.unwrap_or_else(|| {
                 chrono::Utc::now() + chrono::Duration::days(7) // Default 7 days expiry
             })),
-            status: Set("pending".to_string()),
+            status: Set(InviteStatus::Pending),
             created_at: Set(chrono::Utc::now()),
             updated_at: Set(chrono::Utc::now()),
         };
@@ -46,7 +47,7 @@ impl TournamentTeamInviteService {
     ) -> Result<Vec<tournament_team_invite::Model>, AppError> {
         Ok(TournamentTeamInvite::find()
             .filter(tournament_team_invite::Column::Team.eq(team_id))
-            .filter(tournament_team_invite::Column::Status.eq("pending"))
+            .filter(tournament_team_invite::Column::Status.eq(InviteStatus::Pending))
             .all(&self.db)
             .await?)
     }
@@ -55,7 +56,7 @@ impl TournamentTeamInviteService {
         TournamentTeamInvite::update_many()
             .col_expr(
                 tournament_team_invite::Column::Status,
-                Expr::value("accepted"),
+                Expr::value(InviteStatus::Accepted),
             )
             .col_expr(
                 tournament_team_invite::Column::UpdatedAt,

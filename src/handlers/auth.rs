@@ -211,7 +211,7 @@ pub async fn login(
         let token = state.auth_service.generate_jwt(
             admin.id,
             UserType::Admin,
-            Some(admin.role.clone()),
+            Some(admin.role.as_str().to_string()),
             session.id.to_string(),
         )?;
 
@@ -306,7 +306,7 @@ pub async fn login(
                 org_name: Some(org.org_name),
                 user_type: "organization".to_string(),
                 verified: org.email_verified,
-                approval_status: Some(org.approval_status),
+                approval_status: Some(org.approval_status.as_str().to_string()),
             },
         );
     }
@@ -491,20 +491,29 @@ async fn register_organization(
     ip_address: Option<String>,
     user_agent: Option<String>,
 ) -> Result<(HeaderMap, Json<AuthResponse>), AppError> {
-    let org_name = payload
-        .org_name
-        .ok_or_else(|| AppError::Validation("Organization name required".to_string()))?;
-    let owner_name = payload
-        .owner_name
-        .ok_or_else(|| AppError::Validation("Owner name required".to_string()))?;
-    let country = payload
-        .country
-        .ok_or_else(|| AppError::Validation("Country required".to_string()))?;
-    let description = payload
-        .description
-        .ok_or_else(|| AppError::Validation("Description required".to_string()))?;
+    println!("DEBUG: Starting register_organization handler");
 
-    let (org, _) = state
+    let org_name = payload.org_name.ok_or_else(|| {
+        println!("DEBUG: Organization name missing");
+        AppError::Validation("Organization name required".to_string())
+    })?;
+    let owner_name = payload.owner_name.ok_or_else(|| {
+        println!("DEBUG: Owner name missing");
+        AppError::Validation("Owner name required".to_string())
+    })?;
+    let country = payload.country.ok_or_else(|| {
+        println!("DEBUG: Country missing");
+        AppError::Validation("Country required".to_string())
+    })?;
+    let description = payload.description.ok_or_else(|| {
+        println!("DEBUG: Description missing");
+        AppError::Validation("Description required".to_string())
+    })?;
+
+    println!("DEBUG: All required fields validated");
+    println!("DEBUG: About to call organization_service.create_organization");
+
+    let (org, _) = match state
         .organization_service
         .create_organization(
             org_name,
@@ -514,9 +523,23 @@ async fn register_organization(
             country,
             description,
         )
-        .await?;
+        .await
+    {
+        Ok(result) => {
+            println!(
+                "DEBUG: Organization created successfully, ID: {}",
+                result.0.id
+            );
+            result
+        }
+        Err(e) => {
+            println!("DEBUG: Organization creation failed: {:?}", e);
+            return Err(e);
+        }
+    };
 
-    let session = state
+    println!("DEBUG: About to create session for organization");
+    let session = match state
         .session_service
         .create_session(
             org.id,
@@ -524,17 +547,36 @@ async fn register_organization(
             ip_address.clone(),
             user_agent.clone(),
         )
-        .await?;
+        .await
+    {
+        Ok(s) => {
+            println!("DEBUG: Session created successfully, ID: {}", s.id);
+            s
+        }
+        Err(e) => {
+            println!("DEBUG: Session creation failed: {:?}", e);
+            return Err(e);
+        }
+    };
 
-    // ✅ FIXED: Generate JWT with actual session ID
-    let token = state.auth_service.generate_jwt(
+    println!("DEBUG: About to generate JWT token");
+    let token = match state.auth_service.generate_jwt(
         org.id,
         UserType::Organization,
         None,
         session.id.to_string(),
-    )?;
+    ) {
+        Ok(t) => {
+            println!("DEBUG: JWT generated successfully (length: {})", t.len());
+            t
+        }
+        Err(e) => {
+            println!("DEBUG: JWT generation failed: {:?}", e);
+            return Err(e);
+        }
+    };
 
-    // Audit log
+    println!("DEBUG: About to log audit action");
     let _ = state
         .audit_service
         .log_action(
@@ -552,8 +594,10 @@ async fn register_organization(
             None,
         )
         .await;
+    println!("DEBUG: Audit logging completed");
 
-    create_auth_response_with_session(
+    println!("DEBUG: About to create auth response");
+    let result = create_auth_response_with_session(
         token,
         session,
         UserInfo {
@@ -563,9 +607,16 @@ async fn register_organization(
             org_name: Some(org.org_name),
             user_type: "organization".to_string(),
             verified: org.email_verified,
-            approval_status: Some(org.approval_status),
+            approval_status: Some(org.approval_status.as_str().to_string()),
         },
-    )
+    );
+
+    match &result {
+        Ok(_) => println!("DEBUG: Auth response created successfully"),
+        Err(e) => println!("DEBUG: Auth response creation failed: {:?}", e),
+    }
+
+    result
 }
 
 pub async fn refresh_token(
@@ -608,7 +659,7 @@ pub async fn refresh_token(
             state.auth_service.generate_jwt(
                 admin.id,
                 UserType::Admin,
-                Some(admin.role),
+                Some(admin.role.as_str().to_string()),
                 session.id.to_string(),
             )?
         }

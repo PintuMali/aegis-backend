@@ -1,3 +1,4 @@
+use crate::models::enums::{ApprovalStatus, GameType};
 use crate::models::postgres::{organization, Organization};
 use crate::services::auth_service::{AuthService, UserType};
 use crate::utils::errors::AppError;
@@ -50,7 +51,7 @@ impl OrganizationService {
             description: Set(description),
             logo: Set(String::new()),
             established_date: Set(now),
-            active_games: Set(vec![]),
+            active_games: Set(Vec::<GameType>::new()),
             total_earnings: Set(rust_decimal::Decimal::ZERO),
             contact_phone: Set(String::new()),
             discord: Set(String::new()),
@@ -60,7 +61,7 @@ impl OrganizationService {
             website: Set(String::new()),
             linkedin: Set(String::new()),
             profile_visibility: Set("public".to_string()),
-            approval_status: Set("pending".to_string()),
+            approval_status: Set(ApprovalStatus::Pending),
             approved_by: Set(None),
             approval_date: Set(None),
             rejection_reason: Set(None),
@@ -122,7 +123,7 @@ impl OrganizationService {
         match org {
             Some(o) => {
                 let mut org_update: organization::ActiveModel = o.into();
-                org_update.approval_status = Set("approved".to_string());
+                org_update.approval_status = Set(ApprovalStatus::Approved);
                 org_update.approved_by = Set(Some(admin_id));
                 org_update.approval_date = Set(Some(chrono::Utc::now()));
                 org_update.updated_at = Set(chrono::Utc::now());
@@ -143,7 +144,7 @@ impl OrganizationService {
         match org {
             Some(o) => {
                 let mut org_update: organization::ActiveModel = o.into();
-                org_update.approval_status = Set("rejected".to_string());
+                org_update.approval_status = Set(ApprovalStatus::Rejected);
                 org_update.rejection_reason = Set(Some(reason));
                 org_update.updated_at = Set(chrono::Utc::now());
 

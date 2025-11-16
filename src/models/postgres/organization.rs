@@ -1,3 +1,4 @@
+use crate::models::enums::{ApprovalStatus, GameType};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -18,7 +19,7 @@ pub struct Model {
     pub description: String,
     pub logo: String,
     pub established_date: ChronoDateTimeUtc,
-    pub active_games: Vec<String>,
+    pub active_games: Vec<GameType>,
     pub total_earnings: Decimal,
     pub contact_phone: String,
     pub discord: String,
@@ -28,7 +29,7 @@ pub struct Model {
     pub website: String,
     pub linkedin: String,
     pub profile_visibility: String,
-    pub approval_status: String,
+    pub approval_status: ApprovalStatus,
     pub approved_by: Option<Uuid>,
     pub approval_date: Option<ChronoDateTimeUtc>,
     pub rejection_reason: Option<String>,

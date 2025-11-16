@@ -1,3 +1,4 @@
+use crate::models::enums::ApprovalStatus;
 use crate::services::auth_service::Claims;
 use crate::utils::errors::AppError;
 use crate::AppState;
@@ -164,7 +165,7 @@ pub async fn organization_only_middleware(
         .await?
         .ok_or(AppError::Unauthorized)?;
 
-    if org.approval_status != "approved" {
+    if org.approval_status != ApprovalStatus::Approved {
         return Err(AppError::Unauthorized);
     }
 

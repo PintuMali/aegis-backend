@@ -1,3 +1,4 @@
+use crate::models::enums::{GameType, TeamStatus};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -11,7 +12,7 @@ pub struct Model {
     pub team_tag: Option<String>,
     pub logo: String,
     pub captain: Option<Uuid>,
-    pub primary_game: String,
+    pub primary_game: GameType,
     pub region: String,
     pub country: Option<String>,
     pub bio: String,
@@ -25,7 +26,7 @@ pub struct Model {
     pub youtube: String,
     pub website: String,
     pub profile_visibility: String,
-    pub status: String,
+    pub status: TeamStatus,
     pub looking_for_players: bool,
     pub open_roles: Vec<String>,
     pub created_at: ChronoDateTimeUtc,

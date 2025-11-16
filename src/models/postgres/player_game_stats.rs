@@ -1,3 +1,4 @@
+use crate::models::enums::GameType;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -8,7 +9,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: Uuid,
     pub player_id: Uuid,
-    pub game_type: String,
+    pub game_type: GameType,
     pub rank_tier: Option<String>,
     pub battles_played: i32,
     pub wins: i32,
