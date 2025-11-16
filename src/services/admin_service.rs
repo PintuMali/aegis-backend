@@ -114,4 +114,26 @@ impl AdminService {
         }
         Ok(())
     }
+    pub async fn get_by_email(&self, email: String) -> Result<Option<admin::Model>, AppError> {
+        Ok(Admin::find()
+            .filter(admin::Column::Email.eq(email))
+            .one(&self.db)
+            .await?)
+    }
+
+    pub async fn update_password(
+        &self,
+        user_id: Uuid,
+        hashed_password: String,
+    ) -> Result<bool, AppError> {
+        if let Some(admin) = Admin::find_by_id(user_id).one(&self.db).await? {
+            let mut admin_update: admin::ActiveModel = admin.into();
+            admin_update.password = Set(hashed_password);
+            admin_update.updated_at = Set(chrono::Utc::now());
+            Admin::update(admin_update).exec(&self.db).await?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
 }

@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build routes
     let app = Router::new()
         .route("/health", get(health_check))
-        .nest("/api/v1", aegis_backend::routes::create_routes())
+        .nest("", aegis_backend::routes::create_routes())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             selective_auth_middleware,
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 // Add this middleware function
 async fn selective_auth_middleware(
-    axum::extract::State(state): axum::extract::State<AppState>,
+    state: axum::extract::State<AppState>,
     req: Request,
     next: axum::middleware::Next,
 ) -> Result<Response, axum::http::StatusCode> {
@@ -89,19 +89,15 @@ async fn selective_auth_middleware(
 
     if aegis_backend::routes::api::protected_routes().contains(&path) {
         println!("DEBUG: Path is protected, checking JWT");
-        match aegis_backend::middleware::auth::jwt_auth_middleware(
-            axum::extract::State(state),
-            req,
-            next,
-        )
-        .await
-        {
+
+        // Call the actual JWT middleware that adds Claims extension
+        match aegis_backend::middleware::auth::jwt_auth_middleware(state, req, next).await {
             Ok(response) => {
                 println!("DEBUG: JWT middleware succeeded");
                 Ok(response)
             }
-            Err(e) => {
-                println!("DEBUG: JWT middleware failed: {:?}", e);
+            Err(_) => {
+                println!("DEBUG: JWT middleware failed");
                 Err(axum::http::StatusCode::UNAUTHORIZED)
             }
         }
@@ -110,6 +106,7 @@ async fn selective_auth_middleware(
         Ok(next.run(req).await)
     }
 }
+
 async fn run_migrations() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 

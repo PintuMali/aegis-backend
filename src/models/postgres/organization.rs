@@ -8,11 +8,9 @@ use uuid::Uuid;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: Uuid,
-    pub cognito_sub: Option<String>,
     pub org_name: String,
     pub owner_name: String,
     pub email: String,
-    pub google_id: Option<String>,
     pub password: String,
     pub country: String,
     pub headquarters: Option<String>,
@@ -34,7 +32,6 @@ pub struct Model {
     pub approval_date: Option<ChronoDateTimeUtc>,
     pub rejection_reason: Option<String>,
     pub email_verified: bool,
-    pub verification_token: Option<String>,
     pub created_at: ChronoDateTimeUtc,
     pub updated_at: ChronoDateTimeUtc,
 }

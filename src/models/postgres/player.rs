@@ -9,14 +9,11 @@ use uuid::Uuid;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: Uuid,
-    pub cognito_sub: Option<String>,
     pub username: String,
     pub in_game_name: Option<String>,
     pub real_name: Option<String>,
     pub email: String,
     pub password: String,
-    pub reset_password_token: Option<String>,
-    pub reset_password_expiry: Option<ChronoDateTimeUtc>,
     pub verified: bool,
     pub country: Option<String>,
     pub bio: String,

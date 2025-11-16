@@ -26,6 +26,15 @@ pub enum UserType {
     Organization,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TempTokenClaims {
+    pub sub: String,
+    pub user_type: String,
+    pub token_type: String, // "reset_password" or "verify_email"
+    pub exp: usize,
+    pub iat: usize,
+}
+
 impl UserType {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -132,6 +141,46 @@ impl AuthService {
                 println!("DEBUG: JWT verification error: {:?}", e);
                 Err(AppError::Unauthorized)
             }
+        }
+    }
+    pub fn generate_temp_token(
+        &self,
+        user_id: Uuid,
+        user_type: UserType,
+        token_type: &str,
+        expiry_hours: i64,
+    ) -> Result<String, AppError> {
+        let now = Utc::now();
+        let exp = (now + Duration::hours(expiry_hours)).timestamp() as usize;
+
+        let claims = TempTokenClaims {
+            sub: user_id.to_string(),
+            user_type: user_type.as_str().to_string(),
+            token_type: token_type.to_string(),
+            exp,
+            iat: now.timestamp() as usize,
+        };
+
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(self.jwt_secret.as_ref()),
+        )
+        .map_err(|_| AppError::InternalServerError)
+    }
+
+    // Verify temporary token
+    pub fn verify_temp_token(&self, token: &str) -> Result<TempTokenClaims, AppError> {
+        let mut validation = Validation::default();
+        validation.leeway = 0;
+
+        match decode::<TempTokenClaims>(
+            token,
+            &DecodingKey::from_secret(self.jwt_secret.as_ref()),
+            &validation,
+        ) {
+            Ok(data) => Ok(data.claims),
+            Err(_) => Err(AppError::Validation("Invalid or expired token".to_string())),
         }
     }
 }

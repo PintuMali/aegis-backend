@@ -1,5 +1,6 @@
 use crate::services::auth_service::{Claims, UserType};
 use crate::{utils::errors::AppError, AppState};
+use axum::extract::Path;
 use axum::{
     extract::{ConnectInfo, Extension, State},
     http::HeaderMap,
@@ -59,6 +60,16 @@ pub struct UserInfo {
     pub user_type: String,
     pub verified: bool,
     pub approval_status: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ForgotPasswordRequest {
+    pub email: String,
+}
+
+#[derive(Deserialize)]
+pub struct ResetPasswordRequest {
+    pub new_password: String,
 }
 
 fn create_auth_cookie(token: &str) -> String {
@@ -419,23 +430,15 @@ async fn register_player(
         }
     };
 
-    println!("DEBUG: About to send verification email");
-    let verification_token = match state
-        .player_service
-        .send_verification_email(player.id)
-        .await
-    {
-        Ok(token) => {
-            println!("DEBUG: Verification token generated successfully");
-            token
-        }
-        Err(e) => {
-            println!("DEBUG: Verification token generation failed: {:?}", e);
-            return Err(e);
-        }
-    };
+    println!("DEBUG: About to generate verification token");
+    let verification_token = state.auth_service.generate_temp_token(
+        player.id,
+        UserType::Player,
+        "verify_email",
+        24, // 24 hours expiry
+    )?;
 
-    println!("DEBUG: About to send email");
+    println!("DEBUG: About to send verification email");
     let _ = state
         .email_service
         .send_verification_email(&player.email, &verification_token)
@@ -575,6 +578,22 @@ async fn register_organization(
             return Err(e);
         }
     };
+
+    // 🚨 ADD THIS MISSING VERIFICATION EMAIL SECTION:
+    println!("DEBUG: About to generate verification token");
+    let verification_token = state.auth_service.generate_temp_token(
+        org.id,
+        UserType::Organization,
+        "verify_email",
+        24, // 24 hours expiry
+    )?;
+
+    println!("DEBUG: About to send verification email");
+    let _ = state
+        .email_service
+        .send_verification_email(&org.email, &verification_token)
+        .await;
+    println!("DEBUG: Email sending completed (may have failed silently)");
 
     println!("DEBUG: About to log audit action");
     let _ = state
@@ -795,4 +814,213 @@ pub async fn logout(
             "message": "Logout successful"
         })),
     ))
+}
+
+pub async fn forgot_password(
+    State(state): State<AppState>,
+    Json(payload): Json<ForgotPasswordRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let mut reset_token_sent = false;
+
+    // Try player first
+    if let Some(player) = state
+        .player_service
+        .get_by_email(payload.email.clone())
+        .await?
+    {
+        let token = state.auth_service.generate_temp_token(
+            player.id,
+            UserType::Player,
+            "reset_password",
+            1, // 1 hour expiry
+        )?;
+        let _ = state
+            .email_service
+            .send_password_reset(&player.email, &token)
+            .await;
+        reset_token_sent = true;
+    }
+
+    // Try admin if player not found
+    if !reset_token_sent {
+        if let Some(admin) = state
+            .admin_service
+            .get_by_email(payload.email.clone())
+            .await?
+        {
+            let token = state.auth_service.generate_temp_token(
+                admin.id,
+                UserType::Admin,
+                "reset_password",
+                1,
+            )?;
+            let _ = state
+                .email_service
+                .send_password_reset(&admin.email, &token)
+                .await;
+            reset_token_sent = true;
+        }
+    }
+
+    // Try organization if others not found
+    if !reset_token_sent {
+        if let Some(org) = state
+            .organization_service
+            .get_by_email(payload.email.clone())
+            .await?
+        {
+            let token = state.auth_service.generate_temp_token(
+                org.id,
+                UserType::Organization,
+                "reset_password",
+                1,
+            )?;
+            let _ = state
+                .email_service
+                .send_password_reset(&org.email, &token)
+                .await;
+        }
+    }
+
+    Ok(Json(serde_json::json!({
+        "message": "If an account with that email exists, a password reset link has been sent."
+    })))
+}
+
+pub async fn reset_password(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+    Json(payload): Json<ResetPasswordRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let claims = state.auth_service.verify_temp_token(&token)?;
+
+    if claims.token_type != "reset_password" {
+        return Err(AppError::Validation("Invalid token type".to_string()));
+    }
+
+    let user_id = Uuid::parse_str(&claims.sub)?;
+    let hashed_password = state.auth_service.hash_password(&payload.new_password)?;
+
+    let success = match claims.user_type.as_str() {
+        "player" => {
+            state
+                .player_service
+                .update_password(user_id, hashed_password)
+                .await?
+        }
+        "admin" => {
+            state
+                .admin_service
+                .update_password(user_id, hashed_password)
+                .await?
+        }
+        "organization" => {
+            state
+                .organization_service
+                .update_password(user_id, hashed_password)
+                .await?
+        }
+        _ => false,
+    };
+
+    if success {
+        Ok(Json(serde_json::json!({
+            "message": "Password reset successful"
+        })))
+    } else {
+        Err(AppError::Validation(
+            "Invalid or expired reset token".to_string(),
+        ))
+    }
+}
+
+pub async fn verify_email(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let claims = state.auth_service.verify_temp_token(&token)?;
+
+    if claims.token_type != "verify_email" {
+        return Err(AppError::Validation("Invalid token type".to_string()));
+    }
+
+    let user_id = Uuid::parse_str(&claims.sub)?;
+
+    let success = match claims.user_type.as_str() {
+        "player" => state.player_service.verify_email(user_id).await?,
+        "admin" => {
+            true // Admins are typically verified by default
+        }
+        "organization" => state.organization_service.verify_email(user_id).await?,
+        _ => false,
+    };
+
+    if success {
+        Ok(Json(serde_json::json!({
+            "message": "Email verified successfully"
+        })))
+    } else {
+        Err(AppError::Validation(
+            "Invalid verification token".to_string(),
+        ))
+    }
+}
+
+// Update the existing send_verification_email to use the new pattern
+pub async fn send_verification_email(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id = Uuid::parse_str(&claims.sub)?;
+    let user_type = match claims.user_type.as_str() {
+        "player" => UserType::Player,
+        "admin" => UserType::Admin,
+        "organization" => UserType::Organization,
+        _ => return Err(AppError::Validation("Invalid user type".to_string())),
+    };
+
+    let verification_token = state.auth_service.generate_temp_token(
+        user_id,
+        user_type,
+        "verify_email",
+        24, // 24 hours expiry
+    )?;
+
+    // Get user email based on type
+    let email = match claims.user_type.as_str() {
+        "player" => {
+            let player = state
+                .player_service
+                .get_by_id(user_id)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            player.email
+        }
+        "admin" => {
+            let admin = state
+                .admin_service
+                .get_by_id(user_id)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            admin.email
+        }
+        "organization" => {
+            let org = state
+                .organization_service
+                .get_by_id(user_id)
+                .await?
+                .ok_or(AppError::NotFound)?;
+            org.email
+        }
+        _ => return Err(AppError::Validation("Invalid user type".to_string())),
+    };
+
+    state
+        .email_service
+        .send_verification_email(&email, &verification_token)
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "message": "Verification email sent successfully"
+    })))
 }

@@ -9,14 +9,11 @@ CREATE TYPE admin_role AS ENUM ('super_admin', 'admin', 'moderator');
 -- Core Players (UNCHANGED - All existing columns preserved)
 CREATE TABLE players (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    cognito_sub VARCHAR(255) UNIQUE DEFAULT NULL, 
     username VARCHAR(50) UNIQUE NOT NULL,
     in_game_name VARCHAR(100),
     real_name VARCHAR(100),
     email VARCHAR(255) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
-    reset_password_token VARCHAR(255),
-    reset_password_expiry TIMESTAMPTZ,
     verified BOOLEAN DEFAULT FALSE,
     country VARCHAR(100),
     bio TEXT DEFAULT '',
@@ -94,11 +91,9 @@ CREATE TABLE teams (
 -- Organizations (UNCHANGED)
 CREATE TABLE organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    cognito_sub VARCHAR(255) UNIQUE DEFAULT NULL, 
     org_name VARCHAR(200) UNIQUE NOT NULL,
     owner_name VARCHAR(100) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    google_id VARCHAR(255),
     password VARCHAR(255) NOT NULL,
     country VARCHAR(100) NOT NULL,
     headquarters VARCHAR(200),
@@ -120,7 +115,6 @@ CREATE TABLE organizations (
     approval_date TIMESTAMPTZ,
     rejection_reason TEXT,
     email_verified BOOLEAN DEFAULT FALSE,
-    verification_token VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

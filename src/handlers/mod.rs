@@ -7,15 +7,18 @@ pub mod tournaments;
 pub mod uploads;
 
 pub use auth::{
-    login as auth_login, logout as auth_logout, refresh_token, register as auth_register,
-    revoke_all_sessions,
+    forgot_password, login as auth_login, logout as auth_logout, refresh_token,
+    register as auth_register, reset_password, revoke_all_sessions, send_verification_email,
+    verify_email,
 };
+
 pub use chat::*;
 pub use communities::*;
 pub use players::{
-    forgot_password, get_current_player, get_player_by_id, get_player_by_username, reset_password,
-    send_verification_email, verify_email,
+    get_current_player, get_current_player_profile, get_player_by_id, get_player_by_username,
+    list_players, update_player_profile,
 };
+
 pub use post::*;
 pub use uploads::*;
 

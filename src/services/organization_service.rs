@@ -40,11 +40,9 @@ impl OrganizationService {
 
         let new_org = organization::ActiveModel {
             id: Set(Uuid::new_v4()),
-            cognito_sub: Set(None),
             org_name: Set(org_name),
             owner_name: Set(owner_name),
             email: Set(email),
-            google_id: Set(None),
             password: Set(hashed_password),
             country: Set(country),
             headquarters: Set(None),
@@ -66,7 +64,6 @@ impl OrganizationService {
             approval_date: Set(None),
             rejection_reason: Set(None),
             email_verified: Set(false),
-            verification_token: Set(None),
             created_at: Set(now),
             updated_at: Set(now),
         };
@@ -152,6 +149,45 @@ impl OrganizationService {
                 self.get_by_id(org_id).await?.ok_or(AppError::NotFound)
             }
             None => Err(AppError::NotFound),
+        }
+    }
+    // Add these methods to OrganizationService impl block in organization_service.rs
+
+    pub async fn get_by_email(
+        &self,
+        email: String,
+    ) -> Result<Option<organization::Model>, AppError> {
+        Ok(Organization::find()
+            .filter(organization::Column::Email.eq(email))
+            .one(&self.db)
+            .await?)
+    }
+
+    pub async fn update_password(
+        &self,
+        user_id: Uuid,
+        hashed_password: String,
+    ) -> Result<bool, AppError> {
+        if let Some(org) = Organization::find_by_id(user_id).one(&self.db).await? {
+            let mut org_update: organization::ActiveModel = org.into();
+            org_update.password = Set(hashed_password);
+            org_update.updated_at = Set(chrono::Utc::now());
+            Organization::update(org_update).exec(&self.db).await?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub async fn verify_email(&self, user_id: Uuid) -> Result<bool, AppError> {
+        if let Some(org) = Organization::find_by_id(user_id).one(&self.db).await? {
+            let mut org_update: organization::ActiveModel = org.into();
+            org_update.email_verified = Set(true);
+            org_update.updated_at = Set(chrono::Utc::now());
+            Organization::update(org_update).exec(&self.db).await?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 }
