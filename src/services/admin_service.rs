@@ -1,6 +1,6 @@
 use crate::models::enums::AdminRole;
 use crate::models::postgres::{admin, Admin};
-use crate::services::auth_service::{AuthService, UserType};
+use crate::services::auth_service::AuthService;
 use crate::utils::errors::AppError;
 use anyhow::Result;
 use sea_orm::*;
@@ -40,13 +40,8 @@ impl AdminService {
                 }
 
                 if self.auth_service.verify_password(&password, &a.password)? {
-                    let token = self.auth_service.generate_jwt(
-                        a.id,
-                        UserType::Admin,
-                        Some(a.role.as_str().to_string()),
-                        Uuid::new_v4().to_string(),
-                    )?;
-                    Ok(Some((a, token)))
+                    // Return empty string for token - auth handler will generate it
+                    Ok(Some((a, String::new())))
                 } else {
                     self.increment_login_attempts(a.id).await?;
                     Ok(None)
