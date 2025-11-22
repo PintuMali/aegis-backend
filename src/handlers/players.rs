@@ -113,7 +113,12 @@ fn extract_client_info(
 pub async fn get_player_by_id(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
+    Extension(claims): Extension<Claims>,
 ) -> Result<Json<PlayerResponse>, AppError> {
+    let requesting_user_id = Uuid::parse_str(&claims.sub)?;
+    if requesting_user_id != id {
+        return Err(AppError::Forbidden);
+    }
     let player = state
         .player_service
         .get_by_id(id)

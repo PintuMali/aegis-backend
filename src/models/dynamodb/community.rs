@@ -1,15 +1,15 @@
-use serde::{Deserialize, Serialize};
 use super::entity::GameEntity;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Community {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub community_type: String,        // "public", "private", "tournament"
-    pub owner: String,                 // Player UUID
-    pub moderators: Vec<String>,       // Player UUIDs
-    pub members: Vec<String>,          // Player UUIDs
+    pub community_type: String,  // "public", "private", "tournament"
+    pub owner: String,           // Player UUID
+    pub moderators: Vec<String>, // Player UUIDs
+    pub members: Vec<String>,    // Player UUIDs
     pub member_count: i32,
     pub created_at: String,
     pub updated_at: String,
@@ -21,6 +21,7 @@ pub struct CommunityPost {
     pub community_id: String,
     pub post_id: String,
     pub pinned: bool,
+    pub added_by: String,
     pub created_at: String,
 }
 
@@ -37,7 +38,7 @@ impl CommunityPost {
         GameEntity::new(
             "community_post",
             &format!("COMMUNITY#{}", self.community_id),
-            &format!("POST#{}", self.post_id)
+            &format!("POST#{}", self.post_id),
         )
         .with_gsi(&format!("POST#{}", self.post_id), &self.created_at)
         .with_data(self)

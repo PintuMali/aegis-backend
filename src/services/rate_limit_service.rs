@@ -37,7 +37,7 @@ impl RateLimitService {
                 // Check if currently blocked
                 if let Some(blocked_until) = record.blocked_until {
                     if blocked_until > Utc::now() {
-                        return Ok(false); // Still blocked
+                        return Err(AppError::RateLimited);
                     }
                 }
 
@@ -50,7 +50,7 @@ impl RateLimitService {
                             Set(Some(Utc::now() + Duration::minutes(window_minutes)));
                         update.updated_at = Set(Utc::now());
                         RateLimit::update(update).exec(&self.db).await?;
-                        return Ok(false);
+                        return Err(AppError::RateLimited);
                     } else {
                         // Increment attempts - store attempts value before move
                         let current_attempts = record.attempts;

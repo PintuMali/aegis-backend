@@ -1,15 +1,23 @@
 use super::chat::ApiResponse;
-use crate::AppState;
+use crate::services::auth_service::Claims;
+use crate::{utils::errors::AppError, AppState};
+use axum::extract::Extension;
 use axum::{
     extract::{Multipart, Path, State},
     http::StatusCode,
     response::Json,
 };
+use uuid::Uuid;
 
 pub async fn upload_profile_picture(
     Path(user_id): Path<String>,
+    Extension(claims): Extension<Claims>,
     mut multipart: Multipart,
-) -> Result<Json<ApiResponse<String>>, StatusCode> {
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    let requesting_user_id = Uuid::parse_str(&claims.sub)?;
+    if requesting_user_id.to_string() != user_id {
+        return Err(AppError::Forbidden);
+    }
     tracing::info!(
         "📸 Development mode: Processing profile picture upload for user: {}",
         user_id
@@ -17,7 +25,7 @@ pub async fn upload_profile_picture(
 
     while let Some(field) = multipart.next_field().await.map_err(|e| {
         tracing::error!("Multipart field error: {}", e);
-        StatusCode::BAD_REQUEST
+        AppError::Validation("Invalid multipart data".to_string())
     })? {
         let name = field.name().unwrap_or("").to_string();
 
@@ -25,7 +33,7 @@ pub async fn upload_profile_picture(
             let filename = field.file_name().unwrap_or("avatar.jpg").to_string();
             let data = field.bytes().await.map_err(|e| {
                 tracing::error!("Failed to read file bytes: {}", e);
-                StatusCode::BAD_REQUEST
+                AppError::Validation("Failed to read file".to_string())
             })?;
 
             if data.is_empty() {

@@ -83,43 +83,43 @@ pub fn create_routes() -> Router<AppState> {
 }
 
 /// These routes require valid JWT authentication and active session
-pub fn protected_routes() -> Vec<&'static str> {
-    vec![
-        // ========================================
-        // AUTHENTICATED USER MANAGEMENT
-        // ========================================
-        "/auth/logout",
-        "/auth/refresh",
-        "/auth/revoke-sessions",
-        "/auth/send-verification",
-        // ========================================
-        // PLAYER DATA ACCESS (PII/SENSITIVE)
-        // ========================================
-        "/players/me",                 // Current user's data
-        "/players/profile",            // Current user's profile
-        "/players",                    // All players list (sensitive)
-        "/players/:id",                // Individual player data
-        "/players/username/:username", // Player lookup by username
-        // ========================================
-        // SOCIAL FEATURES (USER CONTEXT REQUIRED)
-        // ========================================
-        "/chats",                                    // Create chat
-        "/chats/:chat_id",                           // View chat
-        "/chats/:chat_id/messages",                  // Chat messages
-        "/chats/:chat_id/join/:user_id",             // Join chat
-        "/communities",                              // Create community
-        "/communities/:community_id",                // View community
-        "/communities/:community_id/posts",          // Community posts
-        "/communities/:community_id/join/:user_id",  // Join community
-        "/communities/:community_id/leave/:user_id", // Leave community
-        // ========================================
-        // FILE OPERATIONS (SECURITY CRITICAL)
-        // ========================================
-        "/uploads/profile/:user_id", // Profile picture upload
-        "/uploads/chat/:chat_id",    // Chat file upload
-        "/uploads/presigned/:key",   // S3 presigned URLs
-    ]
-}
+// pub fn protected_routes() -> Vec<&'static str> {
+//     vec![
+//         // ========================================
+//         // AUTHENTICATED USER MANAGEMENT
+//         // ========================================
+//         "/auth/logout",
+//         "/auth/refresh",
+//         "/auth/revoke-sessions",
+//         "/auth/send-verification",
+//         // ========================================
+//         // PLAYER DATA ACCESS (PII/SENSITIVE)
+//         // ========================================
+//         "/players/me",                 // Current user's data
+//         "/players/profile",            // Current user's profile
+//         "/players",                    // All players list (sensitive)
+//         "/players/:id",                // Individual player data
+//         "/players/username/:username", // Player lookup by username
+//         // ========================================
+//         // SOCIAL FEATURES (USER CONTEXT REQUIRED)
+//         // ========================================
+//         "/chats",                                    // Create chat
+//         "/chats/:chat_id",                           // View chat
+//         "/chats/:chat_id/messages",                  // Chat messages
+//         "/chats/:chat_id/join/:user_id",             // Join chat
+//         "/communities",                              // Create community
+//         "/communities/:community_id",                // View community
+//         "/communities/:community_id/posts",          // Community posts
+//         "/communities/:community_id/join/:user_id",  // Join community
+//         "/communities/:community_id/leave/:user_id", // Leave community
+//         // ========================================
+//         // FILE OPERATIONS (SECURITY CRITICAL)
+//         // ========================================
+//         "/uploads/profile/:user_id", // Profile picture upload
+//         "/uploads/chat/:chat_id",    // Chat file upload
+//         "/uploads/presigned/:key",   // S3 presigned URLs
+//     ]
+// }
 
 /// Enterprise Security Classification: Public Routes
 /// These routes are accessible without authentication

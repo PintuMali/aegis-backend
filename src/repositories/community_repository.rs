@@ -1,7 +1,7 @@
+use super::{DynamoRepository, Repository};
+use crate::models::dynamodb::{Community, CommunityPost};
 use anyhow::Result;
 use uuid::Uuid;
-use crate::models::dynamodb::{Community, CommunityPost};
-use super::{Repository, DynamoRepository};
 
 #[derive(Clone)]
 pub struct CommunityRepository {
@@ -17,7 +17,7 @@ impl CommunityRepository {
         if community.id.is_empty() {
             community.id = Uuid::new_v4().to_string();
         }
-        
+
         let entity = community.to_entity()?;
         self.dynamo.put_item(&entity).await?;
         Ok(community.id)
@@ -41,28 +41,28 @@ impl CommunityRepository {
     pub async fn get_community_posts(&self, community_id: &str) -> Result<Vec<CommunityPost>> {
         let pk = format!("COMMUNITY#{}", community_id);
         let entities = self.dynamo.query_by_pk(&pk).await?;
-        
+
         let mut posts = Vec::new();
         for entity in entities {
             if entity.entity_type == "community_post" {
                 posts.push(serde_json::from_value(entity.data)?);
             }
         }
-        
+
         Ok(posts)
     }
 
     pub async fn get_communities_by_owner(&self, owner_id: &str) -> Result<Vec<Community>> {
         let gsi1_pk = format!("OWNER#{}", owner_id);
         let entities = self.dynamo.query_gsi1(&gsi1_pk, None).await?;
-        
+
         let mut communities = Vec::new();
         for entity in entities {
             if entity.entity_type == "community" {
                 communities.push(serde_json::from_value(entity.data)?);
             }
         }
-        
+
         Ok(communities)
     }
 }

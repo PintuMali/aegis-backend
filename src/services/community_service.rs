@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::models::dynamodb::{Community, CommunityPost};
 use crate::repositories::{CommunityRepository, Repository};
+use anyhow::Result;
 
 #[derive(Clone)]
 pub struct CommunityService {
@@ -12,7 +12,13 @@ impl CommunityService {
         Self { community_repo }
     }
 
-    pub async fn create_community(&self, name: String, description: String, community_type: String, owner: String) -> Result<String> {
+    pub async fn create_community(
+        &self,
+        name: String,
+        description: String,
+        community_type: String,
+        owner: String,
+    ) -> Result<String> {
         let community = Community {
             id: String::new(), // Will be generated in repository
             name,
@@ -33,16 +39,25 @@ impl CommunityService {
         self.community_repo.get_community(community_id).await
     }
 
-    pub async fn add_post_to_community(&self, community_id: String, post_id: String, pinned: bool) -> Result<String> {
+    pub async fn add_post_to_community(
+        &self,
+        community_id: String,
+        post_id: String,
+        pinned: bool,
+        added_by: String,
+    ) -> Result<String> {
         let community_post = CommunityPost {
             id: uuid::Uuid::new_v4().to_string(),
             community_id,
             post_id,
             pinned,
+            added_by,
             created_at: chrono::Utc::now().to_rfc3339(),
         };
 
-        self.community_repo.add_post_to_community(community_post).await
+        self.community_repo
+            .add_post_to_community(community_post)
+            .await
     }
 
     pub async fn get_community_posts(&self, community_id: &str) -> Result<Vec<CommunityPost>> {

@@ -35,8 +35,14 @@ pub enum AppError {
     #[error("Unauthorized")]
     Unauthorized,
 
+    #[error("Forbidden")]
+    Forbidden,
+
     #[error("Internal server error")]
     InternalServerError,
+
+    #[error("Too many requests")]
+    RateLimited,
 }
 
 impl IntoResponse for AppError {
@@ -48,6 +54,12 @@ impl IntoResponse for AppError {
             AppError::Validation(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
             AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found"),
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
+            AppError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
+            AppError::RateLimited => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Too many requests. Please try again later.",
+            ),
+
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
         };
 

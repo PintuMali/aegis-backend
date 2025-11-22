@@ -130,18 +130,16 @@ pub async fn login(
 ) -> Result<(HeaderMap, Json<AuthResponse>), AppError> {
     let (ip_address, user_agent) = extract_client_info(&headers, Some(addr));
 
-    // Rate limiting check
+    // Check if already blocked (but don't increment counter yet)
     if let Some(ip) = &ip_address {
-        state
+        let is_blocked = state
             .rate_limit_service
-            .check_rate_limit(
-                ip.clone(),
-                "ip".to_string(),
-                "login".to_string(),
-                5,  // 5 attempts per hour
-                60, // 60 minutes window
-            )
+            .is_blocked(ip.clone(), "ip".to_string(), "login".to_string())
             .await?;
+
+        if is_blocked {
+            return Err(AppError::RateLimited);
+        }
     }
 
     // Try player authentication first
@@ -320,6 +318,19 @@ pub async fn login(
                 approval_status: Some(org.approval_status.as_str().to_string()),
             },
         );
+    }
+
+    if let Some(ip) = &ip_address {
+        let _ = state
+            .rate_limit_service
+            .check_rate_limit(
+                ip.clone(),
+                "ip".to_string(),
+                "login".to_string(),
+                5,  // 5 attempts per hour
+                60, // 60 minutes window
+            )
+            .await;
     }
 
     // Failed login audit
@@ -834,6 +845,8 @@ pub async fn forgot_password(
             "reset_password",
             1, // 1 hour expiry
         )?;
+
+        println!("🔑 DEV MODE - Password Reset Token: {}", token);
         let _ = state
             .email_service
             .send_password_reset(&player.email, &token)
@@ -854,6 +867,9 @@ pub async fn forgot_password(
                 "reset_password",
                 1,
             )?;
+
+            println!("🔑 DEV MODE - Password Reset Token: {}", token);
+
             let _ = state
                 .email_service
                 .send_password_reset(&admin.email, &token)
@@ -875,6 +891,7 @@ pub async fn forgot_password(
                 "reset_password",
                 1,
             )?;
+            println!("🔑 DEV MODE - Password Reset Token: {}", token);
             let _ = state
                 .email_service
                 .send_password_reset(&org.email, &token)
@@ -985,6 +1002,7 @@ pub async fn send_verification_email(
         "verify_email",
         24, // 24 hours expiry
     )?;
+    println!("🔑 DEV MODE - Verification Token: {}", verification_token);
 
     // Get user email based on type
     let email = match claims.user_type.as_str() {

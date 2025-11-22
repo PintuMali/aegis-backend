@@ -86,8 +86,9 @@ async fn selective_auth_middleware(
     let path = req.uri().path();
 
     println!("DEBUG: Middleware checking path: {}", path);
+    let is_protected = matches_protected_route(&path);
 
-    if aegis_backend::routes::api::protected_routes().contains(&path) {
+    if is_protected {
         println!("DEBUG: Path is protected, checking JWT");
 
         // Call the actual JWT middleware that adds Claims extension
@@ -105,6 +106,20 @@ async fn selective_auth_middleware(
         println!("DEBUG: Path is not protected, allowing through");
         Ok(next.run(req).await)
     }
+}
+
+fn matches_protected_route(path: &str) -> bool {
+    path.starts_with("/auth/logout")
+        || path.starts_with("/auth/refresh")
+        || path.starts_with("/auth/revoke-sessions")
+        || path.starts_with("/auth/send-verification")
+        || path.starts_with("/players/me")
+        || path.starts_with("/players/profile")
+        || path == "/players"
+        || (path.starts_with("/players/") && !path.contains("/username/"))
+        || path.starts_with("/chats")
+        || path.starts_with("/communities")
+        || path.starts_with("/uploads")
 }
 
 async fn run_migrations() -> Result<(), Box<dyn std::error::Error>> {
