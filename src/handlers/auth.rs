@@ -76,6 +76,14 @@ fn create_auth_cookie(token: &str) -> String {
     format!(
         "token={}; HttpOnly; SameSite=Lax; Max-Age={}; Path=/; Secure",
         token,
+        15 * 60 // 15 minutes
+    )
+}
+
+fn create_refresh_cookie(refresh_token: &str) -> String {
+    format!(
+        "refresh_token={}; HttpOnly; SameSite=Lax; Max-Age={}; Path=/; Secure",
+        refresh_token,
         7 * 24 * 60 * 60 // 7 days
     )
 }
@@ -101,6 +109,12 @@ fn create_auth_response_with_session(
     headers.insert(
         axum::http::header::SET_COOKIE,
         create_auth_cookie(&token).parse().unwrap(),
+    );
+    headers.append(
+        axum::http::header::SET_COOKIE,
+        create_refresh_cookie(&session.refresh_token)
+            .parse()
+            .unwrap(),
     );
 
     let message = match user.user_type.as_str() {
@@ -158,7 +172,6 @@ pub async fn login(
             )
             .await?;
 
-        // ✅ FIXED: Generate JWT with actual session ID
         let token = state.auth_service.generate_jwt(
             player.id,
             UserType::Player,
@@ -733,6 +746,12 @@ pub async fn refresh_token(
         axum::http::header::SET_COOKIE,
         create_auth_cookie(&new_token).parse().unwrap(),
     );
+    headers.append(
+        axum::http::header::SET_COOKIE,
+        create_refresh_cookie(&session.refresh_token)
+            .parse()
+            .unwrap(),
+    );
 
     Ok((
         headers,
@@ -815,6 +834,12 @@ pub async fn logout(
     headers.insert(
         axum::http::header::SET_COOKIE,
         "token=; HttpOnly; SameSite=Lax; Max-Age=0; Path=/; Secure"
+            .parse()
+            .unwrap(),
+    );
+    headers.append(
+        axum::http::header::SET_COOKIE,
+        "refresh_token=; HttpOnly; SameSite=Lax; Max-Age=0; Path=/; Secure"
             .parse()
             .unwrap(),
     );
