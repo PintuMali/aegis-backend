@@ -163,7 +163,7 @@ CREATE TABLE audit_logs (
     action VARCHAR(50) NOT NULL,
     resource VARCHAR(100),
     resource_id UUID,
-    ip_address INET,
+    ip_address VARCHAR(45),
     user_agent TEXT,
     success BOOLEAN NOT NULL,
     failure_reason VARCHAR(255),
@@ -341,6 +341,140 @@ CREATE TABLE transactions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ==========================================
+-- CHAT SYSTEM TABLES (Enterprise Grade)
+-- ==========================================
+
+-- Chat Rooms/Channels
+CREATE TABLE chats (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chat_type VARCHAR(20) NOT NULL CHECK (chat_type IN ('general', 'team', 'tournament', 'community', 'direct')),
+    name VARCHAR(100) NOT NULL,
+    description TEXT DEFAULT '',
+    participants JSONB DEFAULT '[]', -- Array of player UUIDs
+    created_by UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+    tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
+    community_id UUID,
+    is_private BOOLEAN DEFAULT FALSE,
+    max_participants INTEGER DEFAULT 1000,
+    settings JSONB DEFAULT '{}', -- Chat settings, permissions
+    metadata JSONB DEFAULT '{}', -- Additional data
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Chat Messages (High Performance)
+CREATE TABLE chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    sender_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    message_type VARCHAR(20) DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'file', 'system', 'emoji')),
+    reply_to UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
+    attachments JSONB DEFAULT '[]', -- File URLs, metadata
+    reactions JSONB DEFAULT '{}', -- {emoji: [user_ids]}
+    edited_at TIMESTAMPTZ,
+    deleted_at TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- COMMUNITIES SYSTEM TABLES
+-- ==========================================
+
+-- Communities (Gaming Groups/Clans)
+CREATE TABLE communities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) UNIQUE NOT NULL,
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT DEFAULT '',
+    avatar TEXT DEFAULT '',
+    banner TEXT DEFAULT '',
+    game_focus game_type,
+    region VARCHAR(50) DEFAULT 'Global',
+    privacy VARCHAR(20) DEFAULT 'public' CHECK (privacy IN ('public', 'private', 'invite_only')),
+    member_count INTEGER DEFAULT 0,
+    max_members INTEGER DEFAULT 10000,
+    owner_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    moderators JSONB DEFAULT '[]', -- Array of player UUIDs
+    rules JSONB DEFAULT '[]', -- Community rules
+    tags TEXT[] DEFAULT '{}',
+    settings JSONB DEFAULT '{}', -- Community settings
+    stats JSONB DEFAULT '{}', -- Activity stats
+    social_links JSONB DEFAULT '{}', -- Discord, Twitter, etc.
+    verified BOOLEAN DEFAULT FALSE,
+    featured BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Community Posts (Social Feed)
+CREATE TABLE community_posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    community_id UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    author_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    title VARCHAR(200),
+    content TEXT NOT NULL,
+    post_type VARCHAR(20) DEFAULT 'text' CHECK (post_type IN ('text', 'image', 'video', 'poll', 'event', 'announcement')),
+    attachments JSONB DEFAULT '[]', -- Media files
+    poll_data JSONB DEFAULT '{}', -- Poll options, votes
+    event_data JSONB DEFAULT '{}', -- Event details
+    tags TEXT[] DEFAULT '{}',
+    upvotes INTEGER DEFAULT 0,
+    downvotes INTEGER DEFAULT 0,
+    comment_count INTEGER DEFAULT 0,
+    view_count INTEGER DEFAULT 0,
+    pinned BOOLEAN DEFAULT FALSE,
+    locked BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Post Comments (Nested Comments Support)
+CREATE TABLE post_comments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_id UUID NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+    author_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    parent_id UUID REFERENCES post_comments(id) ON DELETE CASCADE, -- For nested comments
+    content TEXT NOT NULL,
+    upvotes INTEGER DEFAULT 0,
+    downvotes INTEGER DEFAULT 0,
+    reply_count INTEGER DEFAULT 0,
+    deleted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Community Memberships
+CREATE TABLE community_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    community_id UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    role VARCHAR(20) DEFAULT 'member' CHECK (role IN ('owner', 'moderator', 'member', 'banned')),
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    banned_until TIMESTAMPTZ,
+    ban_reason TEXT,
+    permissions JSONB DEFAULT '{}',
+    UNIQUE(community_id, player_id)
+);
+
+-- Activity Logs (Enterprise Audit Trail)
+CREATE TABLE activity_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_type VARCHAR(20) NOT NULL CHECK (entity_type IN ('chat', 'community', 'post', 'comment')),
+    entity_id UUID NOT NULL,
+    actor_id UUID REFERENCES players(id) ON DELETE SET NULL,
+    action VARCHAR(50) NOT NULL,
+    details JSONB DEFAULT '{}',
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 🚀 ENTERPRISE PERFORMANCE: Optimized Indexes
 CREATE INDEX idx_players_email ON players(email);
 CREATE INDEX idx_players_username ON players(username);
@@ -353,8 +487,8 @@ CREATE INDEX idx_organizations_approval_status ON organizations(approval_status)
 CREATE INDEX idx_admins_email ON admins(email);
 CREATE INDEX idx_admins_is_active ON admins(is_active);
 
--- Enterprise Auth Indexes (Critical for performance)
-CREATE INDEX idx_user_sessions_active ON user_sessions(user_id, user_type) WHERE NOT revoked AND expires_at > NOW();
+-- Enterprise Auth Indexes (Fixed IMMUTABLE issues)
+CREATE INDEX idx_user_sessions_active ON user_sessions(user_id, user_type, expires_at) WHERE NOT revoked;
 CREATE INDEX idx_user_sessions_token ON user_sessions(session_token) WHERE NOT revoked;
 CREATE INDEX idx_user_sessions_refresh ON user_sessions(refresh_token) WHERE NOT revoked;
 CREATE INDEX idx_user_sessions_cleanup ON user_sessions(expires_at) WHERE NOT revoked;
@@ -364,8 +498,9 @@ CREATE INDEX idx_audit_logs_user ON audit_logs(user_id, user_type, created_at DE
 CREATE INDEX idx_audit_logs_action ON audit_logs(action, created_at DESC);
 CREATE INDEX idx_audit_logs_session ON audit_logs(session_id);
 
-CREATE INDEX idx_rate_limits_active ON rate_limits(identifier, identifier_type, action) WHERE blocked_until > NOW();
-CREATE INDEX idx_rate_limits_cleanup ON rate_limits(window_start) WHERE blocked_until IS NULL OR blocked_until < NOW();
+-- Fixed IMMUTABLE issues
+CREATE INDEX idx_rate_limits_active ON rate_limits(identifier, identifier_type, action, blocked_until);
+CREATE INDEX idx_rate_limits_cleanup ON rate_limits(window_start, blocked_until);
 
 CREATE INDEX idx_api_keys_lookup ON api_keys(key_id) WHERE is_active;
 CREATE INDEX idx_api_keys_owner ON api_keys(owner_id, owner_type) WHERE is_active;
@@ -383,11 +518,48 @@ CREATE INDEX idx_battles_status ON battles(status);
 CREATE INDEX idx_transactions_player_id ON transactions(player_id);
 CREATE INDEX idx_transactions_status ON transactions(status);
 
+-- Chat System Indexes (Critical for Real-time)
+CREATE INDEX idx_chats_type_participants ON chats USING GIN (participants);
+CREATE INDEX idx_chats_type ON chats(chat_type);
+CREATE INDEX idx_chats_created_by ON chats(created_by);
+CREATE INDEX idx_chats_team_tournament ON chats(team_id, tournament_id) WHERE team_id IS NOT NULL OR tournament_id IS NOT NULL;
+
+-- Chat Messages (Optimized for pagination)
+CREATE INDEX idx_chat_messages_chat_time ON chat_messages(chat_id, created_at DESC);
+CREATE INDEX idx_chat_messages_sender ON chat_messages(sender_id, created_at DESC);
+CREATE INDEX idx_chat_messages_active ON chat_messages(chat_id) WHERE deleted_at IS NULL;
+
+-- Communities Indexes
+CREATE INDEX idx_communities_game_region ON communities(game_focus, region) WHERE privacy = 'public';
+CREATE INDEX idx_communities_owner ON communities(owner_id);
+CREATE INDEX idx_communities_featured ON communities(featured, member_count DESC) WHERE featured = TRUE;
+CREATE INDEX idx_communities_search ON communities USING GIN (to_tsvector('english', name || ' ' || description));
+
+-- Community Posts (Social Feed Performance)
+CREATE INDEX idx_community_posts_feed ON community_posts(community_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX idx_community_posts_author ON community_posts(author_id, created_at DESC);
+CREATE INDEX idx_community_posts_trending ON community_posts(community_id, upvotes DESC, created_at DESC);
+
+-- Comments (Nested Structure)
+CREATE INDEX idx_post_comments_post ON post_comments(post_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX idx_post_comments_parent ON post_comments(parent_id, created_at ASC) WHERE parent_id IS NOT NULL;
+
+-- Memberships
+CREATE INDEX idx_community_members_player ON community_members(player_id, joined_at DESC);
+CREATE INDEX idx_community_members_community ON community_members(community_id, role, joined_at DESC);
+
+-- Activity Logs (Audit Performance)
+CREATE INDEX idx_activity_logs_entity ON activity_logs(entity_type, entity_id, created_at DESC);
+CREATE INDEX idx_activity_logs_actor ON activity_logs(actor_id, created_at DESC);
+
 -- 🔗 ENTERPRISE CONSTRAINTS: Data Integrity
 ALTER TABLE teams ADD CONSTRAINT fk_teams_captain FOREIGN KEY (captain) REFERENCES players(id);
 ALTER TABLE teams ADD CONSTRAINT fk_teams_organization FOREIGN KEY (organization_id) REFERENCES organizations(id);
 ALTER TABLE players ADD CONSTRAINT fk_players_team FOREIGN KEY (team_id) REFERENCES teams(id);
 ALTER TABLE organizations ADD CONSTRAINT fk_organizations_approved_by FOREIGN KEY (approved_by) REFERENCES admins(id);
+
+-- Add chat community constraint after communities table exists
+ALTER TABLE chats ADD CONSTRAINT fk_chats_community FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE;
 
 -- 🤖 ENTERPRISE AUTOMATION: Auto-cleanup Functions
 CREATE OR REPLACE FUNCTION cleanup_expired_sessions()
@@ -402,6 +574,74 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trigger_cleanup_auth_data
     AFTER INSERT ON user_sessions
     EXECUTE FUNCTION cleanup_expired_sessions();
+
+-- Auto-update member count
+CREATE OR REPLACE FUNCTION update_community_member_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE communities 
+        SET member_count = member_count + 1 
+        WHERE id = NEW.community_id;
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE communities 
+        SET member_count = member_count - 1 
+        WHERE id = OLD.community_id;
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_community_member_count
+    AFTER INSERT OR DELETE ON community_members
+    FOR EACH ROW EXECUTE FUNCTION update_community_member_count();
+
+-- Auto-update comment count
+CREATE OR REPLACE FUNCTION update_post_comment_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE community_posts 
+        SET comment_count = comment_count + 1 
+        WHERE id = NEW.post_id;
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE community_posts 
+        SET comment_count = comment_count - 1 
+        WHERE id = OLD.post_id;
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_post_comment_count
+    AFTER INSERT OR DELETE ON post_comments
+    FOR EACH ROW EXECUTE FUNCTION update_post_comment_count();
+
+-- Auto-update timestamps
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_chats_updated_at BEFORE UPDATE ON chats FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trigger_communities_updated_at BEFORE UPDATE ON communities FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trigger_community_posts_updated_at BEFORE UPDATE ON community_posts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Foreign Key Constraints
+ALTER TABLE chats ADD CONSTRAINT fk_chats_created_by FOREIGN KEY (created_by) REFERENCES players(id);
+ALTER TABLE communities ADD CONSTRAINT fk_communities_owner FOREIGN KEY (owner_id) REFERENCES players(id);
+
+-- Data Integrity Constraints
+ALTER TABLE chats ADD CONSTRAINT check_chat_participants_valid CHECK (jsonb_typeof(participants) = 'array');
+ALTER TABLE communities ADD CONSTRAINT check_member_count_positive CHECK (member_count >= 0);
+ALTER TABLE community_posts ADD CONSTRAINT check_vote_counts_positive CHECK (upvotes >= 0 AND downvotes >= 0);
 
 -- 📊 ENTERPRISE MONITORING: Performance Views
 CREATE VIEW active_sessions AS
@@ -424,3 +664,32 @@ FROM audit_logs
 WHERE created_at > NOW() - INTERVAL '30 days'
 GROUP BY DATE(created_at), action
 ORDER BY date DESC, action;
+
+-- Active Chat Statistics
+CREATE VIEW chat_activity_stats AS
+SELECT 
+    DATE(cm.created_at) as date,
+    c.chat_type,                    -- Proper normalization
+    COUNT(*) as message_count,
+    COUNT(DISTINCT cm.sender_id) as active_users,
+    COUNT(DISTINCT cm.chat_id) as active_chats
+FROM chat_messages cm
+JOIN chats c ON cm.chat_id = c.id   -- Enterprise JOIN pattern
+WHERE cm.created_at > NOW() - INTERVAL '30 days'
+GROUP BY DATE(cm.created_at), c.chat_type
+ORDER BY date DESC;
+
+-- Community Engagement Metrics
+CREATE VIEW community_engagement AS
+SELECT 
+    c.id,
+    c.name,
+    c.member_count,
+    COUNT(cp.id) as total_posts,
+    COUNT(pc.id) as total_comments,
+    SUM(cp.upvotes) as total_upvotes
+FROM communities c
+LEFT JOIN community_posts cp ON c.id = cp.community_id AND cp.deleted_at IS NULL
+LEFT JOIN post_comments pc ON cp.id = pc.post_id AND pc.deleted_at IS NULL
+GROUP BY c.id, c.name, c.member_count
+ORDER BY c.member_count DESC;

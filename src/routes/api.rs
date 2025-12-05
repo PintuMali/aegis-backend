@@ -68,6 +68,10 @@ pub fn create_routes() -> Router<AppState> {
             "/communities/:community_id/leave/:user_id",
             post(handlers::leave_community),
         )
+        .route(
+            "/communities/:community_id/members",
+            get(handlers::get_community_members),
+        )
         // ========================================
         // PROTECTED UPLOAD ENDPOINTS (JWT Required)
         // ========================================

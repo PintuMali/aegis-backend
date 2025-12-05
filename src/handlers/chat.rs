@@ -1,3 +1,4 @@
+use crate::models::postgres::{chat, chat_message};
 use crate::services::auth_service::Claims;
 use crate::{utils::errors::AppError, AppState};
 use axum::extract::Extension;
@@ -73,7 +74,7 @@ pub async fn create_chat(
 pub async fn get_chat(
     State(state): State<AppState>,
     Path(chat_id): Path<String>,
-) -> Result<Json<ApiResponse<crate::models::dynamodb::Chat>>, StatusCode> {
+) -> Result<Json<ApiResponse<chat::Model>>, StatusCode> {
     match state.chat_service.get_chat(&chat_id).await {
         Ok(Some(chat)) => Ok(Json(ApiResponse::success(chat))),
         Ok(None) => Err(StatusCode::NOT_FOUND),
@@ -114,7 +115,7 @@ pub async fn get_messages(
     State(state): State<AppState>,
     Path(chat_id): Path<String>,
     Query(params): Query<GetMessagesQuery>,
-) -> Result<Json<ApiResponse<Vec<crate::models::dynamodb::ChatMessage>>>, StatusCode> {
+) -> Result<Json<ApiResponse<Vec<chat_message::Model>>>, StatusCode> {
     match state
         .chat_service
         .get_messages(&chat_id, params.limit)

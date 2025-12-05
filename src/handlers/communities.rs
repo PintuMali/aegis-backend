@@ -1,4 +1,5 @@
 use super::chat::ApiResponse;
+use crate::models::postgres::{community, community_member, community_post};
 use crate::services::auth_service::Claims;
 use crate::{utils::errors::AppError, AppState};
 use axum::extract::Extension;
@@ -50,7 +51,7 @@ pub async fn create_community(
 pub async fn get_community(
     State(state): State<AppState>,
     Path(community_id): Path<String>,
-) -> Result<Json<ApiResponse<crate::models::dynamodb::Community>>, StatusCode> {
+) -> Result<Json<ApiResponse<community::Model>>, StatusCode> {
     match state.community_service.get_community(&community_id).await {
         Ok(Some(community)) => Ok(Json(ApiResponse::success(community))),
         Ok(None) => Err(StatusCode::NOT_FOUND),
@@ -86,7 +87,7 @@ pub async fn add_post_to_community(
 pub async fn get_community_posts(
     State(state): State<AppState>,
     Path(community_id): Path<String>,
-) -> Result<Json<ApiResponse<Vec<crate::models::dynamodb::CommunityPost>>>, StatusCode> {
+) -> Result<Json<ApiResponse<Vec<community_post::Model>>>, StatusCode> {
     match state
         .community_service
         .get_community_posts(&community_id)
@@ -150,6 +151,23 @@ pub async fn leave_community(
         Err(e) => {
             tracing::error!("Failed to leave community: {}", e);
             Err(AppError::InternalServerError)
+        }
+    }
+}
+
+pub async fn get_community_members(
+    State(state): State<AppState>,
+    Path(community_id): Path<String>,
+) -> Result<Json<ApiResponse<Vec<community_member::Model>>>, StatusCode> {
+    match state
+        .community_service
+        .get_community_members(&community_id)
+        .await
+    {
+        Ok(members) => Ok(Json(ApiResponse::success(members))),
+        Err(e) => {
+            tracing::error!("Failed to get community members: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
 }

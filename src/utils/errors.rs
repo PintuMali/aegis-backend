@@ -17,9 +17,6 @@ pub enum AppError {
     #[error("Bcrypt error: {0}")]
     Bcrypt(#[from] bcrypt::BcryptError),
 
-    #[error("AWS DynamoDB error: {0}")]
-    DynamoDB(#[from] aws_sdk_dynamodb::Error),
-
     #[error("AWS S3 error: {0}")]
     S3(#[from] aws_sdk_s3::Error),
 

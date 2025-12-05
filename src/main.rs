@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = setup_postgres(&settings.database.url).await?;
     let aws_clients = AwsClients::new().await;
 
-    // Setup DynamoDB table and S3 bucket
+    // Setup S3 bucket
     setup_aws_resources(&aws_clients).await?;
 
     // Create application state
@@ -58,10 +58,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "🚀 Server running on {}:{}",
         settings.server.host,
         settings.server.port
-    );
-    tracing::info!(
-        "📊 DynamoDB endpoint: {}",
-        env::var("DYNAMODB_ENDPOINT").unwrap_or_default()
     );
     tracing::info!(
         "📦 S3 endpoint: {}",
@@ -116,7 +112,6 @@ fn matches_protected_route(path: &str) -> bool {
         || path.starts_with("/players/me")
         || path.starts_with("/players/profile")
         || path == "/players"
-        || (path.starts_with("/players/") && !path.contains("/username/"))
         || path.starts_with("/chats")
         || path.starts_with("/communities")
         || path.starts_with("/uploads")
@@ -138,32 +133,11 @@ async fn setup_postgres(database_url: &str) -> Result<sea_orm::DatabaseConnectio
 async fn setup_aws_resources(aws_clients: &AwsClients) -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("🔧 Setting up AWS resources for billion-dollar gaming platform...");
 
-    // Create DynamoDB table (Critical - must succeed)
-    tracing::info!("📊 Creating DynamoDB table...");
-    match aegis_backend::scripts::setup_dynamodb::create_gaming_table(&aws_clients.dynamodb).await {
-        Ok(_) => tracing::info!("✅ DynamoDB table created successfully"),
-        Err(e) => {
-            if e.to_string().contains("ResourceInUseException") {
-                tracing::info!("✅ DynamoDB table already exists");
-            } else {
-                tracing::error!("❌ DynamoDB table creation failed: {}", e);
-                return Err(format!("Critical: DynamoDB setup failed: {}", e).into());
-            }
-        }
-    }
-
     // Create S3 bucket (Important but not critical for startup)
     tracing::info!("📦 Setting up S3 bucket...");
     match aegis_backend::scripts::setup_s3::create_gaming_bucket(&aws_clients.s3).await {
         Ok(_) => {
             tracing::info!("✅ S3 bucket ready for file uploads");
-
-            // Setup S3 policies
-            if let Err(e) =
-                aegis_backend::scripts::setup_s3::setup_bucket_policies(&aws_clients.s3).await
-            {
-                tracing::warn!("⚠️  S3 policy setup failed: {}", e);
-            }
         }
         Err(e) => {
             tracing::warn!("⚠️  S3 setup failed: {}", e);
@@ -178,5 +152,5 @@ async fn setup_aws_resources(aws_clients: &AwsClients) -> Result<(), Box<dyn std
 }
 
 async fn health_check() -> &'static str {
-    "🎮 Aegis Gaming Backend - DynamoDB + S3 Ready!"
+    "🎮 Aegis Gaming Backend - S3 Ready!"
 }

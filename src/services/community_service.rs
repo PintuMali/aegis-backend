@@ -1,15 +1,16 @@
-use crate::models::dynamodb::{Community, CommunityPost};
-use crate::repositories::{CommunityRepository, Repository};
+use crate::models::postgres::{community, community_member, community_post};
 use anyhow::Result;
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct CommunityService {
-    community_repo: CommunityRepository,
+    db: DatabaseConnection,
 }
 
 impl CommunityService {
-    pub fn new(community_repo: CommunityRepository) -> Self {
-        Self { community_repo }
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
     }
 
     pub async fn create_community(
@@ -19,24 +20,29 @@ impl CommunityService {
         community_type: String,
         owner: String,
     ) -> Result<String> {
-        let community = Community {
-            id: String::new(), // Will be generated in repository
-            name,
-            description,
-            community_type,
-            owner: owner.clone(),
-            moderators: vec![owner], // Owner is also a moderator
-            members: Vec::new(),
-            member_count: 0,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+        let community_id = Uuid::new_v4();
+        let owner_uuid = Uuid::parse_str(&owner)?;
+
+        let community = community::ActiveModel {
+            id: Set(community_id),
+            name: Set(name),
+            slug: Set(format!("community-{}", community_id)),
+            description: Set(description),
+            privacy: Set(community_type),
+            owner_id: Set(owner_uuid),
+            moderators: Set(serde_json::json!([owner])),
+            ..Default::default()
         };
 
-        self.community_repo.create_community(community).await
+        community.insert(&self.db).await?;
+        Ok(community_id.to_string())
     }
 
-    pub async fn get_community(&self, community_id: &str) -> Result<Option<Community>> {
-        self.community_repo.get_community(community_id).await
+    pub async fn get_community(&self, community_id: &str) -> Result<Option<community::Model>> {
+        let community_uuid = Uuid::parse_str(community_id)?;
+        Ok(community::Entity::find_by_id(community_uuid)
+            .one(&self.db)
+            .await?)
     }
 
     pub async fn add_post_to_community(
@@ -46,49 +52,80 @@ impl CommunityService {
         pinned: bool,
         added_by: String,
     ) -> Result<String> {
-        let community_post = CommunityPost {
-            id: uuid::Uuid::new_v4().to_string(),
-            community_id,
-            post_id,
-            pinned,
-            added_by,
-            created_at: chrono::Utc::now().to_rfc3339(),
+        let post_uuid = Uuid::new_v4();
+        let community_uuid = Uuid::parse_str(&community_id)?;
+        let author_uuid = Uuid::parse_str(&added_by)?;
+
+        let community_post = community_post::ActiveModel {
+            id: Set(post_uuid),
+            community_id: Set(community_uuid),
+            author_id: Set(author_uuid),
+            title: Set(Some("Post".to_string())),
+            content: Set(post_id),
+            pinned: Set(pinned),
+            ..Default::default()
         };
 
-        self.community_repo
-            .add_post_to_community(community_post)
-            .await
+        community_post.insert(&self.db).await?;
+        Ok(post_uuid.to_string())
     }
 
-    pub async fn get_community_posts(&self, community_id: &str) -> Result<Vec<CommunityPost>> {
-        self.community_repo.get_community_posts(community_id).await
+    pub async fn get_community_posts(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<community_post::Model>> {
+        let community_uuid = Uuid::parse_str(community_id)?;
+        Ok(community_post::Entity::find()
+            .filter(community_post::Column::CommunityId.eq(community_uuid))
+            .all(&self.db)
+            .await?)
     }
 
     pub async fn join_community(&self, community_id: &str, user_id: &str) -> Result<()> {
-        if let Some(mut community) = self.community_repo.get_community(community_id).await? {
-            if !community.members.contains(&user_id.to_string()) {
-                community.members.push(user_id.to_string());
-                community.member_count += 1;
-                community.updated_at = chrono::Utc::now().to_rfc3339();
-                self.community_repo.update(&community).await?;
-            }
-        }
+        let community_uuid = Uuid::parse_str(community_id)?;
+        let user_uuid = Uuid::parse_str(user_id)?;
+
+        let member = community_member::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            community_id: Set(community_uuid),
+            player_id: Set(user_uuid),
+            role: Set("member".to_string()),
+            ..Default::default()
+        };
+
+        member.insert(&self.db).await?;
         Ok(())
     }
 
     pub async fn leave_community(&self, community_id: &str, user_id: &str) -> Result<()> {
-        if let Some(mut community) = self.community_repo.get_community(community_id).await? {
-            if let Some(pos) = community.members.iter().position(|x| x == user_id) {
-                community.members.remove(pos);
-                community.member_count -= 1;
-                community.updated_at = chrono::Utc::now().to_rfc3339();
-                self.community_repo.update(&community).await?;
-            }
-        }
+        let community_uuid = Uuid::parse_str(community_id)?;
+        let user_uuid = Uuid::parse_str(user_id)?;
+
+        community_member::Entity::delete_many()
+            .filter(community_member::Column::CommunityId.eq(community_uuid))
+            .filter(community_member::Column::PlayerId.eq(user_uuid))
+            .exec(&self.db)
+            .await?;
+
         Ok(())
     }
 
-    pub async fn get_communities_by_owner(&self, owner_id: &str) -> Result<Vec<Community>> {
-        self.community_repo.get_communities_by_owner(owner_id).await
+    pub async fn get_communities_by_owner(&self, owner_id: &str) -> Result<Vec<community::Model>> {
+        let owner_uuid = Uuid::parse_str(owner_id)?;
+        Ok(community::Entity::find()
+            .filter(community::Column::OwnerId.eq(owner_uuid))
+            .all(&self.db)
+            .await?)
+    }
+
+    pub async fn get_community_members(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<community_member::Model>> {
+        let community_uuid = Uuid::parse_str(community_id)?;
+        Ok(community_member::Entity::find()
+            .filter(community_member::Column::CommunityId.eq(community_uuid))
+            .all(&self.db)
+            .await?)
     }
 }

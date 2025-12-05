@@ -3,18 +3,16 @@ pub mod handlers;
 pub mod middleware;
 pub mod migration;
 pub mod models;
-pub mod repositories;
 pub mod routes;
 pub mod scripts;
 pub mod services;
 pub mod utils;
 
-use repositories::{ChatRepository, CommunityRepository, DynamoRepository, PostRepository};
 use services::{
     AdminService, ApiKeyService, AuditService, AuthService, BattleService, ChatService,
     CommunityService, EmailService, OrganizationService, PlayerGameStatsService, PlayerService,
-    PostService, RateLimitService, RewardService, S3Service, SessionService, TeamService,
-    TournamentService, TournamentTeamInviteService, TournamentTeamService, TransactionService,
+    RateLimitService, RewardService, S3Service, SessionService, TeamService, TournamentService,
+    TournamentTeamInviteService, TournamentTeamService, TransactionService,
 };
 
 #[derive(Clone)]
@@ -36,7 +34,6 @@ pub struct AppState {
     pub transaction_service: TransactionService,
     pub email_service: EmailService,
     pub chat_service: ChatService,
-    pub post_service: PostService,
     pub community_service: CommunityService,
     pub s3_service: S3Service,
     pub session_service: SessionService,
@@ -76,15 +73,8 @@ impl AppState {
         let rate_limit_service = RateLimitService::new(db.clone());
         let api_key_service = ApiKeyService::new(db.clone(), auth_service.clone());
 
-        // DynamoDB services
-        let dynamo_repo = DynamoRepository::new(aws.dynamodb.clone());
-        let chat_repo = ChatRepository::new(dynamo_repo.clone());
-        let post_repo = PostRepository::new(dynamo_repo.clone());
-        let community_repo = CommunityRepository::new(dynamo_repo);
-
-        let chat_service = ChatService::new(chat_repo);
-        let post_service = PostService::new(post_repo);
-        let community_service = CommunityService::new(community_repo);
+        let chat_service = ChatService::new(db.clone());
+        let community_service = CommunityService::new(db.clone());
         let s3_service = S3Service::new(aws.s3.clone());
 
         Self {
@@ -103,10 +93,9 @@ impl AppState {
             player_game_stats_service,
             reward_service,
             transaction_service,
-            email_service,
             chat_service,
-            post_service,
             community_service,
+            email_service,
             s3_service,
             session_service,
             audit_service,
