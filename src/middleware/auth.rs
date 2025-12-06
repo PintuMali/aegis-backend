@@ -1,3 +1,4 @@
+use crate::middleware::permissions::check_permission;
 use crate::models::enums::ApprovalStatus;
 use crate::services::auth_service::Claims;
 use crate::utils::errors::AppError;
@@ -15,6 +16,7 @@ pub async fn jwt_auth_middleware(
 ) -> Result<Response, AppError> {
     println!("DEBUG: JWT middleware - extracting token");
 
+    let path = request.uri().path();
     let token = match extract_token_from_request(&request) {
         Ok(t) => {
             println!("DEBUG: Token extracted successfully (length: {})", t.len());
@@ -74,6 +76,22 @@ pub async fn jwt_auth_middleware(
             session.user_id, claims.sub
         );
         return Err(AppError::Unauthorized);
+    }
+
+    // Check path permissions using our permission system
+    println!(
+        "DEBUG: Checking permissions for path: {} with user_type: {}, verified: {}",
+        path, claims.user_type, claims.verified
+    );
+    // Check path permissions using our permission system
+    match check_permission(path, &claims) {
+        Ok(()) => {
+            println!("DEBUG: Permission check passed");
+        }
+        Err(status) => {
+            println!("DEBUG: Permission check failed with status: {:?}", status);
+            return Err(AppError::Forbidden);
+        }
     }
 
     println!("DEBUG: JWT middleware - all checks passed");

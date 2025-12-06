@@ -27,15 +27,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configuration
     let settings = Settings::new()?;
 
-    // Initialize databases
-    let db = setup_postgres(&settings.database.url).await?;
+    // Initialize databases - BOTH SeaORM and SQLx
+    let database_url = &settings.database.url;
+    let db = sea_orm::Database::connect(database_url).await?;
+    let sql_pool = sqlx::PgPool::connect(database_url).await?; // Add this
+
     let aws_clients = AwsClients::new().await;
 
     // Setup S3 bucket
     setup_aws_resources(&aws_clients).await?;
 
     // Create application state
-    let app_state = AppState::new(db, aws_clients, settings.clone()).await;
+    let app_state = AppState::new(db, sql_pool, aws_clients, settings.clone()).await;
 
     // Build routes
     let app = Router::new()
@@ -93,9 +96,16 @@ async fn selective_auth_middleware(
                 println!("DEBUG: JWT middleware succeeded");
                 Ok(response)
             }
-            Err(_) => {
-                println!("DEBUG: JWT middleware failed");
-                Err(axum::http::StatusCode::UNAUTHORIZED)
+            Err(err) => {
+                println!("DEBUG: JWT middleware failed with error: {:?}", err);
+                // Map AppError to appropriate HTTP status
+                let status = match err {
+                    aegis_backend::utils::errors::AppError::Forbidden => {
+                        axum::http::StatusCode::FORBIDDEN
+                    }
+                    _ => axum::http::StatusCode::UNAUTHORIZED,
+                };
+                Err(status)
             }
         }
     } else {
@@ -124,10 +134,6 @@ async fn run_migrations() -> Result<(), Box<dyn std::error::Error>> {
     Migrator::up(&db, None).await?;
     tracing::info!("✅ PostgreSQL migrations completed successfully");
     Ok(())
-}
-
-async fn setup_postgres(database_url: &str) -> Result<sea_orm::DatabaseConnection, sea_orm::DbErr> {
-    sea_orm::Database::connect(database_url).await
 }
 
 async fn setup_aws_resources(aws_clients: &AwsClients) -> Result<(), Box<dyn std::error::Error>> {

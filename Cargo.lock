@@ -30,6 +30,7 @@ dependencies = [
  "serde",
  "serde_json",
  "socketioxide",
+ "sqlx",
  "strum",
  "thiserror 1.0.69",
  "tokio",

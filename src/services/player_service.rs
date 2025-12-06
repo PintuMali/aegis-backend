@@ -175,8 +175,8 @@ impl PlayerService {
         let token = match self.auth_service.generate_jwt(
             player.id,
             UserType::Player,
-            None,
             Uuid::new_v4().to_string(),
+            player.verified,
         ) {
             Ok(t) => {
                 println!(
@@ -211,8 +211,8 @@ impl PlayerService {
                     let token = self.auth_service.generate_jwt(
                         p.id,
                         UserType::Player,
-                        None,
                         Uuid::new_v4().to_string(),
+                        p.verified,
                     )?;
                     Ok(Some((p, token)))
                 } else {
@@ -223,6 +223,23 @@ impl PlayerService {
         }
     }
 
+    pub async fn authenticate_by_id(
+        &self,
+        user_id: Uuid,
+        password: String,
+    ) -> Result<Option<(player::Model, String)>, AppError> {
+        let player = player::Entity::find_by_id(user_id).one(&self.db).await?;
+
+        if let Some(player) = player {
+            if self
+                .auth_service
+                .verify_password(&password, &player.password)?
+            {
+                return Ok(Some((player, "player".to_string())));
+            }
+        }
+        Ok(None)
+    }
     pub async fn get_by_id(&self, id: Uuid) -> Result<Option<player::Model>, AppError> {
         Ok(Player::find_by_id(id).one(&self.db).await?)
     }

@@ -32,6 +32,9 @@ pub enum AppError {
     #[error("Unauthorized")]
     Unauthorized,
 
+    #[error("SQLx error: {0}")]
+    Sqlx(#[from] sqlx::Error),
+
     #[error("Forbidden")]
     Forbidden,
 

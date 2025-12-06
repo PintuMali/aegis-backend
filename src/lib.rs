@@ -18,6 +18,7 @@ use services::{
 #[derive(Clone)]
 pub struct AppState {
     pub db: sea_orm::DatabaseConnection,
+    pub sql_pool: sqlx::PgPool,
     pub aws: config::AwsClients,
     pub settings: config::Settings,
     pub auth_service: AuthService,
@@ -45,6 +46,7 @@ pub struct AppState {
 impl AppState {
     pub async fn new(
         db: sea_orm::DatabaseConnection,
+        sql_pool: sqlx::PgPool,
         aws: config::AwsClients,
         settings: config::Settings,
     ) -> Self {
@@ -79,6 +81,7 @@ impl AppState {
 
         Self {
             db,
+            sql_pool,
             aws,
             settings,
             auth_service,

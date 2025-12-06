@@ -12,8 +12,8 @@ use uuid::Uuid;
 pub struct Claims {
     pub sub: String,
     pub user_type: String,
-    pub role: Option<String>,
     pub session_id: String,
+    pub verified: bool,
     pub exp: usize,
     pub iat: usize,
     pub jti: String,
@@ -85,8 +85,8 @@ impl AuthService {
         &self,
         user_id: Uuid,
         user_type: UserType,
-        role: Option<String>,
-        session_id: String, // ✅ FIXED: Use actual session ID
+        session_id: String,
+        verified: bool,
     ) -> Result<String, AppError> {
         let now = Utc::now();
         let exp = (now + Duration::seconds(self.jwt_expiration)).timestamp() as usize;
@@ -94,8 +94,8 @@ impl AuthService {
         let claims = Claims {
             sub: user_id.to_string(),
             user_type: user_type.as_str().to_string(),
-            role,
-            session_id, // ✅ FIXED: Use actual session ID
+            session_id,
+            verified,
             exp,
             iat: now.timestamp() as usize,
             jti: Uuid::new_v4().to_string(),

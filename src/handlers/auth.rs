@@ -7,6 +7,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use sqlx;
 use std::net::SocketAddr;
 use uuid::Uuid;
 
@@ -76,7 +77,7 @@ fn create_auth_cookie(token: &str) -> String {
     format!(
         "token={}; HttpOnly; SameSite=Lax; Max-Age={}; Path=/; Secure",
         token,
-        15 * 60 // 15 minutes
+        60 * 60 // 1 hour
     )
 }
 
@@ -144,7 +145,7 @@ pub async fn login(
 ) -> Result<(HeaderMap, Json<AuthResponse>), AppError> {
     let (ip_address, user_agent) = extract_client_info(&headers, Some(addr));
 
-    // Check if already blocked (but don't increment counter yet)
+    // Rate limiting check
     if let Some(ip) = &ip_address {
         let is_blocked = state
             .rate_limit_service
@@ -156,216 +157,200 @@ pub async fn login(
         }
     }
 
-    // Try player authentication first
-    if let Some((player, _)) = state
-        .player_service
-        .authenticate(payload.email.clone(), payload.password.clone())
-        .await?
-    {
-        let session = state
-            .session_service
-            .create_session(
+    let user_info = sqlx::query!(
+        "SELECT id, 'player' as user_type FROM players WHERE email = $1
+     UNION ALL
+     SELECT id, 'admin' as user_type FROM admins WHERE email = $1  
+     UNION ALL
+     SELECT id, 'organization' as user_type FROM organizations WHERE email = $1
+     LIMIT 1",
+        payload.email
+    )
+    .fetch_optional(&state.sql_pool)
+    .await?
+    .ok_or(AppError::Unauthorized)?;
+
+    match user_info.user_type.as_deref() {
+        Some("player") => {
+            let user_id = user_info.id.ok_or(AppError::Unauthorized)?; // Fix: unwrap the Option
+            let (player, _) = state
+                .player_service
+                .authenticate_by_id(user_id, payload.password) // Use unwrapped user_id
+                .await?
+                .ok_or(AppError::Unauthorized)?;
+
+            let session = state
+                .session_service
+                .create_session(
+                    player.id,
+                    "player".to_string(),
+                    ip_address.clone(),
+                    user_agent.clone(),
+                )
+                .await?;
+
+            let token = state.auth_service.generate_jwt(
                 player.id,
-                "player".to_string(),
-                ip_address.clone(),
-                user_agent.clone(),
+                UserType::Player,
+                session.id.to_string(),
+                player.verified,
+            )?;
+
+            // Audit log
+            let _ = state
+                .audit_service
+                .log_action(
+                    Some(player.id),
+                    Some("player".to_string()),
+                    Some(session.id),
+                    "login".to_string(),
+                    Some("player".to_string()),
+                    Some(player.id),
+                    ip_address.clone(),
+                    user_agent.clone(),
+                    true,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+
+            create_auth_response_with_session(
+                token,
+                session,
+                UserInfo {
+                    id: player.id,
+                    email: player.email,
+                    username: Some(player.username),
+                    org_name: None,
+                    user_type: "player".to_string(),
+                    verified: player.verified,
+                    approval_status: None,
+                },
             )
-            .await?;
+        }
+        Some("admin") => {
+            let user_id = user_info.id.ok_or(AppError::Unauthorized)?; // Fix: unwrap the Option
+            let (admin, _) = state
+                .admin_service
+                .authenticate_by_id(user_id, payload.password) // Use unwrapped user_id
+                .await?
+                .ok_or(AppError::Unauthorized)?;
 
-        let token = state.auth_service.generate_jwt(
-            player.id,
-            UserType::Player,
-            None,
-            session.id.to_string(),
-        )?;
+            let session = state
+                .session_service
+                .create_session(
+                    admin.id,
+                    "admin".to_string(),
+                    ip_address.clone(),
+                    user_agent.clone(),
+                )
+                .await?;
 
-        // Audit log
-        let _ = state
-            .audit_service
-            .log_action(
-                Some(player.id),
-                Some("player".to_string()),
-                Some(session.id),
-                "login".to_string(),
-                Some("player".to_string()),
-                Some(player.id),
-                ip_address.clone(),
-                user_agent.clone(),
-                true,
-                None,
-                None,
-                None,
-            )
-            .await;
-
-        return create_auth_response_with_session(
-            token,
-            session,
-            UserInfo {
-                id: player.id,
-                email: player.email,
-                username: Some(player.username),
-                org_name: None,
-                user_type: "player".to_string(),
-                verified: player.verified,
-                approval_status: None,
-            },
-        );
-    }
-
-    // Try admin authentication
-    if let Some((admin, _)) = state
-        .admin_service
-        .authenticate(payload.email.clone(), payload.password.clone())
-        .await?
-    {
-        let session = state
-            .session_service
-            .create_session(
+            let token = state.auth_service.generate_jwt(
                 admin.id,
-                "admin".to_string(),
-                ip_address.clone(),
-                user_agent.clone(),
-            )
-            .await?;
-
-        // ✅ FIXED: Generate JWT with actual session ID
-        let token = state.auth_service.generate_jwt(
-            admin.id,
-            UserType::Admin,
-            Some(admin.role.as_str().to_string()),
-            session.id.to_string(),
-        )?;
-
-        // Audit log
-        let _ = state
-            .audit_service
-            .log_action(
-                Some(admin.id),
-                Some("admin".to_string()),
-                Some(session.id),
-                "login".to_string(),
-                Some("admin".to_string()),
-                Some(admin.id),
-                ip_address.clone(),
-                user_agent.clone(),
+                UserType::Admin,
+                session.id.to_string(),
                 true,
-                None,
-                None,
-                None,
+            )?;
+
+            // Audit log
+            let _ = state
+                .audit_service
+                .log_action(
+                    Some(admin.id),
+                    Some("admin".to_string()),
+                    Some(session.id),
+                    "login".to_string(),
+                    Some("admin".to_string()),
+                    Some(admin.id),
+                    ip_address.clone(),
+                    user_agent.clone(),
+                    true,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+
+            create_auth_response_with_session(
+                token,
+                session,
+                UserInfo {
+                    id: admin.id,
+                    email: admin.email,
+                    username: Some(admin.username),
+                    org_name: None,
+                    user_type: "admin".to_string(),
+                    verified: true,
+                    approval_status: Some(if admin.is_active {
+                        "active".to_string()
+                    } else {
+                        "inactive".to_string()
+                    }),
+                },
             )
-            .await;
+        }
+        Some("organization") => {
+            let user_id = user_info.id.ok_or(AppError::Unauthorized)?; // Fix: unwrap the Option
+            let (org, _) = state
+                .organization_service
+                .authenticate_by_id(user_id, payload.password) // Use unwrapped user_id
+                .await?
+                .ok_or(AppError::Unauthorized)?;
 
-        return create_auth_response_with_session(
-            token,
-            session,
-            UserInfo {
-                id: admin.id,
-                email: admin.email,
-                username: Some(admin.username),
-                org_name: None,
-                user_type: "admin".to_string(),
-                verified: true,
-                approval_status: Some(if admin.is_active {
-                    "active".to_string()
-                } else {
-                    "inactive".to_string()
-                }),
-            },
-        );
-    }
+            let session = state
+                .session_service
+                .create_session(
+                    org.id,
+                    "organization".to_string(),
+                    ip_address.clone(),
+                    user_agent.clone(),
+                )
+                .await?;
 
-    // Try organization authentication
-    if let Some((org, _)) = state
-        .organization_service
-        .authenticate(payload.email.clone(), payload.password)
-        .await?
-    {
-        let session = state
-            .session_service
-            .create_session(
+            let token = state.auth_service.generate_jwt(
                 org.id,
-                "organization".to_string(),
-                ip_address.clone(),
-                user_agent.clone(),
+                UserType::Organization,
+                session.id.to_string(),
+                org.email_verified,
+            )?;
+
+            // Audit log
+            let _ = state
+                .audit_service
+                .log_action(
+                    Some(org.id),
+                    Some("organization".to_string()),
+                    Some(session.id),
+                    "login".to_string(),
+                    Some("organization".to_string()),
+                    Some(org.id),
+                    ip_address.clone(),
+                    user_agent.clone(),
+                    true,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+
+            create_auth_response_with_session(
+                token,
+                session,
+                UserInfo {
+                    id: org.id,
+                    email: org.email,
+                    username: None,
+                    org_name: Some(org.org_name),
+                    user_type: "organization".to_string(),
+                    verified: org.email_verified,
+                    approval_status: Some(org.approval_status.as_str().to_string()),
+                },
             )
-            .await?;
-
-        // ✅ FIXED: Generate JWT with actual session ID
-        let token = state.auth_service.generate_jwt(
-            org.id,
-            UserType::Organization,
-            None,
-            session.id.to_string(),
-        )?;
-
-        // Audit log
-        let _ = state
-            .audit_service
-            .log_action(
-                Some(org.id),
-                Some("organization".to_string()),
-                Some(session.id),
-                "login".to_string(),
-                Some("organization".to_string()),
-                Some(org.id),
-                ip_address.clone(),
-                user_agent.clone(),
-                true,
-                None,
-                None,
-                None,
-            )
-            .await;
-
-        return create_auth_response_with_session(
-            token,
-            session,
-            UserInfo {
-                id: org.id,
-                email: org.email,
-                username: None,
-                org_name: Some(org.org_name),
-                user_type: "organization".to_string(),
-                verified: org.email_verified,
-                approval_status: Some(org.approval_status.as_str().to_string()),
-            },
-        );
+        }
+        _ => Err(AppError::Unauthorized),
     }
-
-    if let Some(ip) = &ip_address {
-        let _ = state
-            .rate_limit_service
-            .check_rate_limit(
-                ip.clone(),
-                "ip".to_string(),
-                "login".to_string(),
-                5,  // 5 attempts per hour
-                60, // 60 minutes window
-            )
-            .await;
-    }
-
-    // Failed login audit
-    let _ = state
-        .audit_service
-        .log_action(
-            None,
-            None,
-            None,
-            "login".to_string(),
-            None,
-            None,
-            ip_address,
-            user_agent,
-            false,
-            Some("Invalid credentials".to_string()),
-            None,
-            None,
-        )
-        .await;
-
-    Err(AppError::Unauthorized)
 }
 
 pub async fn register(
@@ -441,8 +426,8 @@ async fn register_player(
     let token = match state.auth_service.generate_jwt(
         player.id,
         UserType::Player,
-        None,
         session.id.to_string(),
+        player.verified,
     ) {
         Ok(t) => {
             println!("DEBUG: JWT generated successfully (length: {})", t.len());
@@ -590,8 +575,8 @@ async fn register_organization(
     let token = match state.auth_service.generate_jwt(
         org.id,
         UserType::Organization,
-        None,
         session.id.to_string(),
+        org.email_verified,
     ) {
         Ok(t) => {
             println!("DEBUG: JWT generated successfully (length: {})", t.len());
@@ -689,8 +674,8 @@ pub async fn refresh_token(
             state.auth_service.generate_jwt(
                 player.id,
                 UserType::Player,
-                None,
                 session.id.to_string(),
+                player.verified,
             )?
         }
         "admin" => {
@@ -702,8 +687,8 @@ pub async fn refresh_token(
             state.auth_service.generate_jwt(
                 admin.id,
                 UserType::Admin,
-                Some(admin.role.as_str().to_string()),
                 session.id.to_string(),
+                true,
             )?
         }
         "organization" => {
@@ -715,8 +700,8 @@ pub async fn refresh_token(
             state.auth_service.generate_jwt(
                 org.id,
                 UserType::Organization,
-                None,
                 session.id.to_string(),
+                org.email_verified,
             )?
         }
         _ => return Err(AppError::Unauthorized),

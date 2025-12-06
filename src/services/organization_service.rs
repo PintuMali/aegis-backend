@@ -72,8 +72,8 @@ impl OrganizationService {
         let token = self.auth_service.generate_jwt(
             org.id,
             UserType::Organization,
-            None,
             Uuid::new_v4().to_string(),
+            org.email_verified,
         )?;
 
         Ok((org, token))
@@ -95,8 +95,8 @@ impl OrganizationService {
                     let token = self.auth_service.generate_jwt(
                         o.id,
                         UserType::Organization,
-                        None,
                         Uuid::new_v4().to_string(),
+                        o.email_verified,
                     )?;
                     Ok(Some((o, token)))
                 } else {
@@ -105,6 +105,26 @@ impl OrganizationService {
             }
             None => Ok(None),
         }
+    }
+
+    pub async fn authenticate_by_id(
+        &self,
+        user_id: Uuid,
+        password: String,
+    ) -> Result<Option<(organization::Model, String)>, AppError> {
+        let org = organization::Entity::find_by_id(user_id)
+            .one(&self.db)
+            .await?;
+
+        if let Some(org) = org {
+            if self
+                .auth_service
+                .verify_password(&password, &org.password)?
+            {
+                return Ok(Some((org, "organization".to_string())));
+            }
+        }
+        Ok(None)
     }
 
     pub async fn get_by_id(&self, id: Uuid) -> Result<Option<organization::Model>, AppError> {

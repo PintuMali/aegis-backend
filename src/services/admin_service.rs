@@ -51,6 +51,24 @@ impl AdminService {
         }
     }
 
+    pub async fn authenticate_by_id(
+        &self,
+        user_id: Uuid,
+        password: String,
+    ) -> Result<Option<(admin::Model, String)>, AppError> {
+        let admin = admin::Entity::find_by_id(user_id).one(&self.db).await?;
+
+        if let Some(admin) = admin {
+            if self
+                .auth_service
+                .verify_password(&password, &admin.password)?
+            {
+                return Ok(Some((admin, "admin".to_string())));
+            }
+        }
+        Ok(None)
+    }
+
     pub async fn get_by_id(&self, id: Uuid) -> Result<Option<admin::Model>, AppError> {
         Ok(Admin::find_by_id(id).one(&self.db).await?)
     }
