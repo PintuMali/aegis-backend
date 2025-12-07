@@ -10,14 +10,15 @@ pub mod utils;
 
 use services::{
     AdminService, ApiKeyService, AuditService, AuthService, BattleService, ChatService,
-    CommunityService, EmailService, OrganizationService, PlayerGameStatsService, PlayerService,
-    RateLimitService, RewardService, S3Service, SessionService, TeamService, TournamentService,
-    TournamentTeamInviteService, TournamentTeamService, TransactionService,
+    CommunityService, DashboardService, EmailService, OrganizationService, PlayerGameStatsService,
+    PlayerService, RateLimitService, RewardService, S3Service, SessionService, TeamService,
+    TournamentService, TournamentTeamInviteService, TournamentTeamService, TransactionService,
 };
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: sea_orm::DatabaseConnection,
+    pub dashboard_service: DashboardService,
     pub sql_pool: sqlx::PgPool,
     pub aws: config::AwsClients,
     pub settings: config::Settings,
@@ -78,9 +79,11 @@ impl AppState {
         let chat_service = ChatService::new(db.clone());
         let community_service = CommunityService::new(db.clone());
         let s3_service = S3Service::new(aws.s3.clone());
+        let dashboard_service = DashboardService::new(sql_pool.clone(), settings.redis.url.clone());
 
         Self {
             db,
+            dashboard_service,
             sql_pool,
             aws,
             settings,

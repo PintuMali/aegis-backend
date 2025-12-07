@@ -11,6 +11,8 @@ services:
       POSTGRES_PASSWORD: pass
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aegis-network
     # Enterprise resource management
     deploy:
       resources:
@@ -32,8 +34,32 @@ services:
       - MINIO_ROOT_PASSWORD=minioadmin@12345
     volumes:
       - s3_data:/data
+    networks:
+      - aegis-network
     restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass myredispassword
+    volumes:
+      - redis_data:/data
+    networks:
+      - aegis-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "myredispassword", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
 volumes:
   postgres_data:
   s3_data:
+  redis_data:
+
+
+networks:
+  aegis-network:
+    driver: bridge

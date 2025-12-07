@@ -7,6 +7,7 @@ pub struct Settings {
     pub database: DatabaseConfig,
     pub jwt: JwtConfig,
     pub email: EmailConfig,
+    pub redis: RedisSettings,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -37,6 +38,11 @@ pub struct JwtConfig {
     pub expiration: i64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisSettings {
+    pub url: Option<String>,
+}
+
 impl Settings {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Settings {
@@ -64,6 +70,9 @@ impl Settings {
                     .unwrap_or_else(|_| "noreply@aegis.com".to_string()),
                 from_name: env::var("AEGIS_EMAIL__FROM_NAME")
                     .unwrap_or_else(|_| "Aegis Gaming".to_string()),
+            },
+            redis: RedisSettings {
+                url: env::var("AEGIS_REDIS__URL").ok(),
             },
         })
     }

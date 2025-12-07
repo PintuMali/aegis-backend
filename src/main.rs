@@ -125,6 +125,7 @@ fn matches_protected_route(path: &str) -> bool {
         || path.starts_with("/chats")
         || path.starts_with("/communities")
         || path.starts_with("/uploads")
+        || path.starts_with("/dashboard")
 }
 
 async fn run_migrations() -> Result<(), Box<dyn std::error::Error>> {

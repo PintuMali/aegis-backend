@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod chat;
 pub mod communities;
+pub mod dashboard;
 pub mod players;
 pub mod tournaments;
 pub mod uploads;
@@ -19,6 +20,8 @@ pub use players::{
 };
 
 pub use uploads::*;
+
+pub use dashboard::{dashboard_health, get_dashboard_data};
 
 use axum::{http::StatusCode, Json};
 use serde_json::{json, Value};

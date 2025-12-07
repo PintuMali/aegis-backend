@@ -84,6 +84,11 @@ pub fn create_routes() -> Router<AppState> {
             post(handlers::upload_chat_attachment),
         )
         .route("/uploads/presigned/:key", get(handlers::get_presigned_url))
+        // ========================================
+        // PROTECTED Dashboard ENDPOINTS (JWT Required)
+        // ========================================
+        .route("/dashboard/data", get(handlers::get_dashboard_data))
+        .route("/dashboard/health", get(handlers::dashboard_health))
 }
 
 /// These routes require valid JWT authentication and active session

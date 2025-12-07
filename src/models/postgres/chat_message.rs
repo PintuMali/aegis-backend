@@ -9,6 +9,7 @@ pub struct Model {
     pub id: Uuid,
     pub chat_id: Uuid,
     pub sender_id: Uuid,
+    pub receiver_id: Option<Uuid>,
     pub message: String,
     pub message_type: String,
     pub reply_to: Option<Uuid>,

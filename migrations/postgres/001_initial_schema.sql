@@ -364,11 +364,12 @@ CREATE TABLE chats (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Chat Messages (High Performance)
+-- Chat Messages (High Performance with Direct Message Support)
 CREATE TABLE chat_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
     sender_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    receiver_id UUID REFERENCES players(id) ON DELETE CASCADE, -- Fixed syntax error
     message TEXT NOT NULL,
     message_type VARCHAR(20) DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'file', 'system', 'emoji')),
     reply_to UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
@@ -377,8 +378,13 @@ CREATE TABLE chat_messages (
     edited_at TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ,
     metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- Enterprise constraint: Either group message OR direct message
+    CONSTRAINT check_chat_or_receiver 
+        CHECK ((chat_id IS NOT NULL AND receiver_id IS NULL) OR (chat_id IS NULL AND receiver_id IS NOT NULL))
 );
+
 
 -- ==========================================
 -- COMMUNITIES SYSTEM TABLES
@@ -475,6 +481,33 @@ CREATE TABLE activity_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Team player invitations (enterprise standard)
+CREATE TABLE team_player_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    invited_player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    inviter_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'expired')),
+    message TEXT,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    UNIQUE(team_id, invited_player_id, status) -- Prevent duplicate pending invites
+);
+
+-- Enterprise indexes for performance
+CREATE INDEX idx_team_player_invitations_invited_player ON team_player_invitations(invited_player_id, status);
+CREATE INDEX idx_team_player_invitations_team ON team_player_invitations(team_id, status);
+CREATE INDEX idx_team_player_invitations_expires ON team_player_invitations(expires_at) WHERE status = 'pending';
+
+-- Auto-update timestamp trigger
+CREATE TRIGGER update_team_player_invitations_updated_at
+    BEFORE UPDATE ON team_player_invitations
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+
 -- 🚀 ENTERPRISE PERFORMANCE: Optimized Indexes
 CREATE INDEX idx_players_email ON players(email);
 CREATE INDEX idx_players_username ON players(username);
@@ -527,6 +560,7 @@ CREATE INDEX idx_chats_team_tournament ON chats(team_id, tournament_id) WHERE te
 -- Chat Messages (Optimized for pagination)
 CREATE INDEX idx_chat_messages_chat_time ON chat_messages(chat_id, created_at DESC);
 CREATE INDEX idx_chat_messages_sender ON chat_messages(sender_id, created_at DESC);
+CREATE INDEX idx_chat_messages_receiver ON chat_messages(receiver_id, created_at DESC) WHERE receiver_id IS NOT NULL;
 CREATE INDEX idx_chat_messages_active ON chat_messages(chat_id) WHERE deleted_at IS NULL;
 
 -- Communities Indexes
@@ -534,6 +568,8 @@ CREATE INDEX idx_communities_game_region ON communities(game_focus, region) WHER
 CREATE INDEX idx_communities_owner ON communities(owner_id);
 CREATE INDEX idx_communities_featured ON communities(featured, member_count DESC) WHERE featured = TRUE;
 CREATE INDEX idx_communities_search ON communities USING GIN (to_tsvector('english', name || ' ' || description));
+CREATE INDEX idx_chat_messages_system ON chat_messages(receiver_id, message_type, created_at DESC) WHERE message_type = 'system';
+CREATE INDEX idx_chat_messages_direct_active ON chat_messages(receiver_id) WHERE deleted_at IS NULL AND receiver_id IS NOT NULL;
 
 -- Community Posts (Social Feed Performance)
 CREATE INDEX idx_community_posts_feed ON community_posts(community_id, created_at DESC) WHERE deleted_at IS NULL;
@@ -693,3 +729,33 @@ LEFT JOIN community_posts cp ON c.id = cp.community_id AND cp.deleted_at IS NULL
 LEFT JOIN post_comments pc ON cp.id = pc.post_id AND pc.deleted_at IS NULL
 GROUP BY c.id, c.name, c.member_count
 ORDER BY c.member_count DESC;
+
+CREATE TABLE player_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    requester_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    recipient_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'blocked')),
+    message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(requester_id, recipient_id)
+);
+
+CREATE INDEX idx_player_connections_recipient ON player_connections(recipient_id, status);
+CREATE INDEX idx_player_connections_requester ON player_connections(requester_id, status);
+
+CREATE TABLE recruitment_approaches (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    recruiter_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    target_player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'withdrawn')),
+    message TEXT,
+    position_offered VARCHAR(100),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(team_id, target_player_id, recruiter_id)
+);
+
+CREATE INDEX idx_recruitment_approaches_target ON recruitment_approaches(target_player_id, status);
+CREATE INDEX idx_recruitment_approaches_recruiter ON recruitment_approaches(recruiter_id, status);

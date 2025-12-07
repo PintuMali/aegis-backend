@@ -100,5 +100,16 @@ pub fn get_path_permissions() -> Vec<PathPermission> {
             require_verified: Some(true),
             description: Some("File uploads".to_string()),
         },
+        //Dashboard routes
+        PathPermission {
+            path: "/dashboard/*".to_string(),
+            access: vec![
+                "admin".to_string(),
+                "player".to_string(),
+                "organization".to_string(),
+            ],
+            require_verified: Some(true),
+            description: Some("Dashboard access".to_string()),
+        },
     ]
 }
