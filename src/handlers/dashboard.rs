@@ -26,7 +26,7 @@ pub async fn get_dashboard_data(
 }
 
 pub async fn dashboard_health(
-    State(state): State<AppState>, // Change from State<DashboardService>
+    State(_state): State<AppState>, // Change from State<DashboardService>
 ) -> Result<Json<Value>, StatusCode> {
     Ok(Json(json!({
         "status": "healthy",

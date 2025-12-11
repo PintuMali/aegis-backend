@@ -74,18 +74,32 @@ pub struct ResetPasswordRequest {
 }
 
 fn create_auth_cookie(token: &str) -> String {
+    let secure = if cfg!(debug_assertions) {
+        ""
+    } else {
+        "; Secure"
+    };
     format!(
-        "token={}; HttpOnly; SameSite=Lax; Max-Age={}; Path=/; Secure",
+        "token={}; HttpOnly; SameSite=Lax; Max-Age={}; Path={}{}",
         token,
-        60 * 60 // 1 hour
+        60 * 60,
+        "/",
+        secure
     )
 }
 
 fn create_refresh_cookie(refresh_token: &str) -> String {
+    let secure = if cfg!(debug_assertions) {
+        ""
+    } else {
+        "; Secure"
+    };
     format!(
-        "refresh_token={}; HttpOnly; SameSite=Lax; Max-Age={}; Path=/; Secure",
+        "refresh_token={}; HttpOnly; SameSite=Lax; Max-Age={}; Path={}{}",
         refresh_token,
-        7 * 24 * 60 * 60 // 7 days
+        7 * 24 * 60 * 60, // 7 days
+        "/",
+        secure
     )
 }
 

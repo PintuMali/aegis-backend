@@ -23,6 +23,16 @@ pub fn get_path_permissions() -> Vec<PathPermission> {
             require_verified: None,
             description: Some("User registration".to_string()),
         },
+        PathPermission {
+            path: "/auth/logout".to_string(),
+            access: vec![
+                "admin".to_string(),
+                "player".to_string(),
+                "organization".to_string(),
+            ],
+            require_verified: Some(false),
+            description: Some("User logout".to_string()),
+        },
         // Admin routes
         PathPermission {
             path: "/admin/*".to_string(),
