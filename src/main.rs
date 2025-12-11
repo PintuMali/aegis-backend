@@ -116,9 +116,10 @@ async fn selective_auth_middleware(
 
 fn matches_protected_route(path: &str) -> bool {
     path.starts_with("/auth/logout")
-        || path.starts_with("/auth/refresh")
+        // || path.starts_with("/auth/refresh")
         || path.starts_with("/auth/revoke-sessions")
         || path.starts_with("/auth/send-verification")
+        || path == "/me"
         || path.starts_with("/players/me")
         || path.starts_with("/players/profile")
         || path == "/players"

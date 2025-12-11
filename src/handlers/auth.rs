@@ -39,8 +39,6 @@ pub struct RefreshTokenRequest {
 #[derive(Serialize)]
 pub struct AuthResponse {
     pub message: String,
-    pub token: String,
-    pub refresh_token: String,
     pub session_id: String,
     pub user: UserInfo,
 }
@@ -119,6 +117,7 @@ fn create_auth_response_with_session(
     token: String,
     session: crate::models::postgres::user_session::Model,
     user: UserInfo,
+    is_registration: bool,
 ) -> Result<(HeaderMap, Json<AuthResponse>), AppError> {
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -132,19 +131,25 @@ fn create_auth_response_with_session(
             .unwrap(),
     );
 
-    let message = match user.user_type.as_str() {
-        "player" => "Player registration successful. Please verify your email.",
-        "organization" => "Organization registration successful. Pending admin approval.",
-        "admin" => "Admin login successful.",
-        _ => "Authentication successful.",
+    let message = if is_registration {
+        match user.user_type.as_str() {
+            "player" => "Player registration successful. Please verify your email.",
+            "organization" => "Organization registration successful. Pending admin approval.",
+            _ => "Registration successful.",
+        }
+    } else {
+        match user.user_type.as_str() {
+            "player" => "Player login successful.",
+            "organization" => "Organization login successful.",
+            "admin" => "Admin login successful.",
+            _ => "Login successful.",
+        }
     };
 
     Ok((
         headers,
         Json(AuthResponse {
             message: message.to_string(),
-            token,
-            refresh_token: session.refresh_token,
             session_id: session.id.to_string(),
             user,
         }),
@@ -241,6 +246,7 @@ pub async fn login(
                     verified: player.verified,
                     approval_status: None,
                 },
+                false,
             )
         }
         Some("admin") => {
@@ -303,6 +309,7 @@ pub async fn login(
                         "inactive".to_string()
                     }),
                 },
+                false,
             )
         }
         Some("organization") => {
@@ -361,6 +368,7 @@ pub async fn login(
                     verified: org.email_verified,
                     approval_status: Some(org.approval_status.as_str().to_string()),
                 },
+                false,
             )
         }
         _ => Err(AppError::Unauthorized),
@@ -501,6 +509,7 @@ async fn register_player(
             verified: player.verified,
             approval_status: None,
         },
+        true,
     );
 
     match &result {
@@ -651,6 +660,7 @@ async fn register_organization(
             verified: org.email_verified,
             approval_status: Some(org.approval_status.as_str().to_string()),
         },
+        true,
     );
 
     match &result {
@@ -665,13 +675,16 @@ pub async fn refresh_token(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    Json(payload): Json<RefreshTokenRequest>,
 ) -> Result<(HeaderMap, Json<TokenResponse>), AppError> {
     let (ip_address, user_agent) = extract_client_info(&headers, Some(addr));
 
+    // Extract refresh token from cookie instead of JSON body
+    let refresh_token =
+        extract_refresh_token_from_cookies(&headers).ok_or(AppError::Unauthorized)?;
+
     let session = state
         .session_service
-        .refresh_session(&payload.refresh_token)
+        .refresh_session(&refresh_token)
         .await?
         .ok_or(AppError::Unauthorized)?;
 
@@ -751,6 +764,20 @@ pub async fn refresh_token(
             .parse()
             .unwrap(),
     );
+
+    fn extract_refresh_token_from_cookies(headers: &HeaderMap) -> Option<String> {
+        if let Some(cookie_header) = headers.get("cookie") {
+            if let Ok(cookies) = cookie_header.to_str() {
+                for cookie in cookies.split(';') {
+                    let cookie = cookie.trim();
+                    if let Some(token) = cookie.strip_prefix("refresh_token=") {
+                        return Some(token.to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
 
     Ok((
         headers,

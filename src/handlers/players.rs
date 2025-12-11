@@ -48,6 +48,25 @@ pub struct PlayerResponse {
 }
 
 #[derive(Serialize)]
+pub struct CurrentUserResponse {
+    pub id: Uuid,
+    pub email: String,
+    pub user_type: String,
+    pub session_id: String,
+    // Player fields
+    pub username: Option<String>,
+    pub coins: Option<i32>,
+    pub verified: Option<bool>,
+    // Admin fields
+    pub role: Option<String>,
+    // Organization fields
+    pub org_name: Option<String>,
+    pub owner_name: Option<String>,
+    pub description: Option<String>,
+    pub approval_status: Option<String>,
+}
+
+#[derive(Serialize)]
 pub struct PlayerProfileResponse {
     // Core Identity
     pub id: Uuid,
@@ -132,24 +151,83 @@ pub async fn get_player_by_id(
     }))
 }
 
-pub async fn get_current_player(
+//This function is unified for all the user later move to appropriate file for structuring if requied
+pub async fn get_current_user(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-) -> Result<Json<PlayerResponse>, AppError> {
-    let player_id = Uuid::parse_str(&claims.sub)?;
-    let player = state
-        .player_service
-        .get_by_id(player_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+) -> Result<Json<CurrentUserResponse>, AppError> {
+    let user_id = Uuid::parse_str(&claims.sub)?;
 
-    Ok(Json(PlayerResponse {
-        id: player.id,
-        username: player.username,
-        email: player.email,
-    }))
+    match claims.user_type.as_str() {
+        "player" => {
+            let player = state
+                .player_service
+                .get_by_id(user_id)
+                .await?
+                .ok_or(AppError::NotFound)?;
+
+            Ok(Json(CurrentUserResponse {
+                id: player.id,
+                email: player.email,
+                user_type: "player".to_string(),
+                session_id: claims.session_id,
+                username: Some(player.username),
+                coins: Some(player.coins as i32),
+                verified: Some(player.verified),
+                role: None,
+                org_name: None,
+                owner_name: None,
+                description: None,
+                approval_status: None,
+            }))
+        }
+        "admin" => {
+            let admin = state
+                .admin_service
+                .get_by_id(user_id)
+                .await?
+                .ok_or(AppError::NotFound)?;
+
+            Ok(Json(CurrentUserResponse {
+                id: admin.id,
+                email: admin.email,
+                user_type: "admin".to_string(),
+                session_id: claims.session_id,
+                username: Some(admin.username),
+                role: Some(admin.role.as_str().to_string()),
+                coins: None,
+                verified: None,
+                org_name: None,
+                owner_name: None,
+                description: None,
+                approval_status: None,
+            }))
+        }
+        "organization" => {
+            let org = state
+                .organization_service
+                .get_by_id(user_id)
+                .await?
+                .ok_or(AppError::NotFound)?;
+
+            Ok(Json(CurrentUserResponse {
+                id: org.id,
+                email: org.email,
+                user_type: "organization".to_string(),
+                session_id: claims.session_id,
+                org_name: Some(org.org_name),
+                owner_name: Some(org.owner_name),
+                description: Some(org.description),
+                verified: Some(org.email_verified),
+                approval_status: Some(org.approval_status.as_str().to_string()),
+                username: None,
+                coins: None,
+                role: None,
+            }))
+        }
+        _ => Err(AppError::Unauthorized),
+    }
 }
-
 pub async fn get_player_by_username(
     State(state): State<AppState>,
     Path(username): Path<String>,

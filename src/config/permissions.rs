@@ -33,6 +33,16 @@ pub fn get_path_permissions() -> Vec<PathPermission> {
             require_verified: Some(false),
             description: Some("User logout".to_string()),
         },
+        PathPermission {
+            path: "/me".to_string(),
+            access: vec![
+                "admin".to_string(),
+                "player".to_string(),
+                "organization".to_string(),
+            ],
+            require_verified: Some(false), // Allow unverified users to see their profile
+            description: Some("Current user profile".to_string()),
+        },
         // Admin routes
         PathPermission {
             path: "/admin/*".to_string(),
@@ -113,11 +123,7 @@ pub fn get_path_permissions() -> Vec<PathPermission> {
         //Dashboard routes
         PathPermission {
             path: "/dashboard/*".to_string(),
-            access: vec![
-                "admin".to_string(),
-                "player".to_string(),
-                "organization".to_string(),
-            ],
+            access: vec!["player".to_string(), "organization".to_string()],
             require_verified: Some(true),
             description: Some("Dashboard access".to_string()),
         },

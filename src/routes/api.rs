@@ -30,7 +30,7 @@ pub fn create_routes() -> Router<AppState> {
         // ========================================
         // PROTECTED PLAYER ENDPOINTS (JWT Required)
         // ========================================
-        .route("/players/me", get(handlers::get_current_player))
+        .route("/me", get(handlers::get_current_user))
         .route(
             "/players/profile",
             get(handlers::get_current_player_profile),

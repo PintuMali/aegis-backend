@@ -15,7 +15,7 @@ pub use auth::{
 pub use chat::*;
 pub use communities::*;
 pub use players::{
-    get_current_player, get_current_player_profile, get_player_by_id, get_player_by_username,
+    get_current_player_profile, get_current_user, get_player_by_id, get_player_by_username,
     list_players, update_player_profile,
 };
 
